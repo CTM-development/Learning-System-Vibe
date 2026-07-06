@@ -183,6 +183,40 @@ export interface Source {
   added_at: string;
 }
 
+export interface LLMStatus {
+  configured: boolean;
+  model: string;
+  daily_tokens: number;
+  tokens_today: number;
+  cost_today: number;
+}
+
+export interface LLMModel {
+  id: string;
+  name: string;
+  pricing: { prompt: string; completion: string };
+}
+
+export interface ProposedCard {
+  front: string;
+  back: string;
+}
+
+export interface GenerateResponse {
+  cards: ProposedCard[];
+  model: string;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    cost: number;
+  };
+}
+
+export interface AcceptResponse {
+  added: number;
+  card_ids: string[];
+}
+
 export interface SyncResult {
   notes: number;
   cards_created: number;

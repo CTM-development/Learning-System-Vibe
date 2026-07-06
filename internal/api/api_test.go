@@ -11,13 +11,14 @@ import (
 	"testing/fstest"
 
 	"github.com/CTM-development/learning-system-vibe/internal/config"
+	"github.com/CTM-development/learning-system-vibe/internal/llm"
 	"github.com/CTM-development/learning-system-vibe/internal/mdsync"
 	"github.com/CTM-development/learning-system-vibe/internal/sources"
 	"github.com/CTM-development/learning-system-vibe/internal/srs"
 	"github.com/CTM-development/learning-system-vibe/internal/store"
 )
 
-func newTestServer(t *testing.T) (*httptest.Server, *store.Store, string) {
+func newTestServer(t *testing.T) (*httptest.Server, *Server, string) {
 	t.Helper()
 	notesDir := t.TempDir()
 	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
@@ -33,12 +34,13 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store, string) {
 		Syncer:    &mdsync.Syncer{Store: st, NotesDir: notesDir},
 		Scheduler: srs.NewScheduler(),
 		Sources:   &sources.Manager{Store: st, AttachmentsDir: t.TempDir()},
+		LLM:       &llm.Client{},
 		Config:    config.Default(),
 		Version:   "test",
 	}
 	ts := httptest.NewServer(srv.Handler(fstest.MapFS{}))
 	t.Cleanup(ts.Close)
-	return ts, st, notesDir
+	return ts, srv, notesDir
 }
 
 func postJSON(t *testing.T, url string, body any) *http.Response {
@@ -64,7 +66,8 @@ func decode[T any](t *testing.T, res *http.Response) T {
 // TestReviewLoop drives the full cycle: session start → sync a note →
 // queue → review → schedule advanced + event attributed to the session.
 func TestReviewLoop(t *testing.T) {
-	ts, st, notesDir := newTestServer(t)
+	ts, srv, notesDir := newTestServer(t)
+	st := srv.Store
 
 	// Start a learning session.
 	res := postJSON(t, ts.URL+"/api/sessions/start", map[string]string{"kind": "learning"})

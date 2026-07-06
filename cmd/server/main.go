@@ -18,6 +18,7 @@ import (
 
 	"github.com/CTM-development/learning-system-vibe/internal/api"
 	"github.com/CTM-development/learning-system-vibe/internal/config"
+	"github.com/CTM-development/learning-system-vibe/internal/llm"
 	"github.com/CTM-development/learning-system-vibe/internal/mdsync"
 	"github.com/CTM-development/learning-system-vibe/internal/sources"
 	"github.com/CTM-development/learning-system-vibe/internal/srs"
@@ -84,6 +85,7 @@ func run(configPath string) error {
 			Syncer:    syncer,
 			Scheduler: srs.NewScheduler(),
 			Sources:   &sources.Manager{Store: st, AttachmentsDir: cfg.AttachmentsDir},
+			LLM:       &llm.Client{APIKey: cfg.OpenRouterAPIKey, BaseURL: cfg.LLMBaseURL},
 			Config:    cfg,
 			Version:   version,
 		}).Handler(dist),

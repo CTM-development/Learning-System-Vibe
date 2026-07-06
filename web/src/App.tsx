@@ -15,6 +15,7 @@ import Cards from "./views/Cards";
 import Stats from "./views/Stats";
 import Sources from "./views/Sources";
 import SourceViewer from "./views/SourceViewer";
+import Generate from "./views/Generate";
 
 const views = [
   { path: "/review", label: "Review" },
@@ -22,6 +23,7 @@ const views = [
   { path: "/sources", label: "Sources" },
   { path: "/cards", label: "Cards" },
   { path: "/stats", label: "Stats" },
+  { path: "/generate", label: "Generate" },
 ] as const;
 
 export default function App() {
@@ -38,6 +40,7 @@ export default function App() {
           <Route path="/stats" element={<Stats />} />
           <Route path="/sources" element={<Sources />} />
           <Route path="/sources/:id" element={<SourceViewer />} />
+          <Route path="/generate" element={<Generate />} />
         </Routes>
       </main>
     </div>

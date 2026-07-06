@@ -1,6 +1,7 @@
 package store
 
 import (
+	"io/fs"
 	"path/filepath"
 	"testing"
 )
@@ -42,12 +43,16 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err := s.Migrate(); err != nil {
 		t.Fatalf("second Migrate: %v", err)
 	}
+	files, err := fs.Glob(migrationsFS, "migrations/*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	var n int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 {
-		t.Errorf("schema_migrations rows = %d, want 1", n)
+	if n != len(files) {
+		t.Errorf("schema_migrations rows = %d, want %d (one per embedded migration)", n, len(files))
 	}
 }
 

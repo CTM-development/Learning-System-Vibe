@@ -33,6 +33,14 @@ variables override the file. Defaults in parentheses.
 | `attachments_dir` | `LEARN_ATTACHMENTS_DIR`| `attachments` |
 | `db_path`         | `LEARN_DB_PATH`        | `learning.db` |
 | `new_per_day`     | `LEARN_NEW_PER_DAY`    | `10`          |
+| `openrouter_api_key` | `LEARN_OPENROUTER_API_KEY` | *(unset — LLM features off)* |
+| `llm_model`       | `LEARN_LLM_MODEL`      | `anthropic/claude-haiku-4.5` |
+| `llm_daily_tokens`| `LEARN_LLM_DAILY_TOKENS` | `300000`    |
+
+The OpenRouter key enables the Generate view (LLM card proposals with a
+human accept/edit step). The key stays server-side; generation is grounded
+strictly in your note content, calls are logged to `llm_calls`, and the
+daily token budget hard-stops further calls when exhausted.
 
 Everything on disk is portable: the notes directory (markdown), the
 attachments directory (PDFs), and one SQLite file. Back up = copy those three.

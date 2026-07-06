@@ -17,7 +17,7 @@ import (
 // TestSourceUploadFlow drives upload → list → search (notes+sources) →
 // file download.
 func TestSourceUploadFlow(t *testing.T) {
-	ts, st, _ := newTestServer(t)
+	ts, _, _ := newTestServer(t)
 
 	pdfData, err := os.ReadFile(filepath.Join("..", "..", "testdata", "pdfs", "fixture.pdf"))
 	if err != nil {
@@ -102,6 +102,4 @@ func TestSourceUploadFlow(t *testing.T) {
 	if !strings.Contains(errBody.Error, "not a PDF") {
 		t.Errorf("error = %q", errBody.Error)
 	}
-
-	_ = st
 }
