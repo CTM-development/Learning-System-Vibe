@@ -12,6 +12,7 @@ import (
 
 	"github.com/CTM-development/learning-system-vibe/internal/config"
 	"github.com/CTM-development/learning-system-vibe/internal/mdsync"
+	"github.com/CTM-development/learning-system-vibe/internal/sources"
 	"github.com/CTM-development/learning-system-vibe/internal/srs"
 	"github.com/CTM-development/learning-system-vibe/internal/store"
 )
@@ -31,6 +32,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store, string) {
 		Store:     st,
 		Syncer:    &mdsync.Syncer{Store: st, NotesDir: notesDir},
 		Scheduler: srs.NewScheduler(),
+		Sources:   &sources.Manager{Store: st, AttachmentsDir: t.TempDir()},
 		Config:    config.Default(),
 		Version:   "test",
 	}

@@ -13,6 +13,8 @@ import NoteReader from "./views/NoteReader";
 import Review from "./views/Review";
 import Cards from "./views/Cards";
 import Stats from "./views/Stats";
+import Sources from "./views/Sources";
+import SourceViewer from "./views/SourceViewer";
 
 const views = [
   { path: "/review", label: "Review" },
@@ -34,7 +36,8 @@ export default function App() {
           <Route path="/notes/*" element={<NoteReader />} />
           <Route path="/cards" element={<Cards />} />
           <Route path="/stats" element={<Stats />} />
-          <Route path="/sources" element={<Placeholder label="Sources" />} />
+          <Route path="/sources" element={<Sources />} />
+          <Route path="/sources/:id" element={<SourceViewer />} />
         </Routes>
       </main>
     </div>
@@ -178,13 +181,3 @@ function LiveTimer({ since }: { since: string }) {
   );
 }
 
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
-      <h1 className="text-xl font-semibold">{label}</h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        This view arrives in a later milestone.
-      </p>
-    </div>
-  );
-}

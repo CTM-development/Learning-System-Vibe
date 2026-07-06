@@ -162,6 +162,27 @@ export interface SearchHit {
   snippet: string;
 }
 
+export interface SourceSearchHit {
+  source_id: number;
+  title: string;
+  snippet: string;
+}
+
+export interface SearchResponse {
+  notes: SearchHit[];
+  sources: SourceSearchHit[];
+}
+
+export interface Source {
+  id: number;
+  kind: "pdf" | "url" | "book";
+  key: string;
+  path: string;
+  title: string;
+  meta: string;
+  added_at: string;
+}
+
 export interface SyncResult {
   notes: number;
   cards_created: number;

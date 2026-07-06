@@ -3,8 +3,6 @@ package store
 import (
 	"encoding/json"
 	"fmt"
-	"html"
-	"strings"
 )
 
 // CardInfo is the card-browser projection: content plus schedule state.
@@ -127,14 +125,10 @@ type SearchHit struct {
 // query is quoted per term so FTS5 operator syntax cannot break it. Snippets
 // are HTML-escaped (note content is untrusted) with matches in <mark> tags.
 func (s *Store) SearchNotes(q string, limit int) ([]SearchHit, error) {
-	terms := strings.Fields(q)
-	if len(terms) == 0 {
+	match := ftsMatchQuery(q)
+	if match == "" {
 		return []SearchHit{}, nil
 	}
-	for i, t := range terms {
-		terms[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"*`
-	}
-	match := strings.Join(terms, " ")
 
 	// Sentinels survive HTML escaping and become <mark> afterwards.
 	rows, err := s.DB.Query(`
@@ -151,9 +145,7 @@ func (s *Store) SearchNotes(q string, limit int) ([]SearchHit, error) {
 		if err := rows.Scan(&h.Path, &h.Title, &h.Snippet); err != nil {
 			return nil, err
 		}
-		h.Snippet = html.EscapeString(h.Snippet)
-		h.Snippet = strings.ReplaceAll(h.Snippet, "\x01", "<mark>")
-		h.Snippet = strings.ReplaceAll(h.Snippet, "\x02", "</mark>")
+		h.Snippet = escapeSnippet(h.Snippet)
 		out = append(out, h)
 	}
 	return out, rows.Err()

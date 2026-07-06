@@ -1,53 +1,24 @@
-import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, type NoteDetail } from "../api";
+import { apiGet, apiPost, type NoteDetail, type Source } from "../api";
 import { stageColors } from "./Notes";
 import Markdown from "../Markdown";
+import { useReadTimer } from "../useReadTimer";
 
 const stages = ["skim", "deep", "synthesis"] as const;
-
-// Accumulates the time this note is actually visible and reports it as one
-// note_read event when the reader closes (or the tab hides for good).
-function useReadTimer(path: string) {
-  useEffect(() => {
-    if (!path) return;
-    let visibleSince: number | null = document.hidden ? null : Date.now();
-    let accumulated = 0;
-
-    const onVisibility = () => {
-      if (document.hidden && visibleSince !== null) {
-        accumulated += Date.now() - visibleSince;
-        visibleSince = null;
-      } else if (!document.hidden && visibleSince === null) {
-        visibleSince = Date.now();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      if (visibleSince !== null) accumulated += Date.now() - visibleSince;
-      if (accumulated >= 3000) {
-        void fetch("/api/events", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          keepalive: true,
-          body: JSON.stringify({
-            kind: "note_read",
-            ref: path,
-            elapsed_ms: accumulated,
-          }),
-        });
-      }
-    };
-  }, [path]);
-}
 
 export default function NoteReader() {
   const { "*": path = "" } = useParams();
   const queryClient = useQueryClient();
-  useReadTimer(path);
+  useReadTimer("note_read", path);
+
+  const allSources = useQuery({
+    queryKey: ["sources"],
+    queryFn: () => apiGet<Source[]>("/api/sources"),
+  });
+  const sourceByKey = new Map(
+    (allSources.data ?? []).map((s) => [s.key, s]),
+  );
 
   const note = useQuery({
     queryKey: ["note", path],
@@ -79,8 +50,12 @@ export default function NoteReader() {
   }
 
   const n = note.data;
-  // Strip frontmatter from the rendered view; it is shown as chips instead.
-  const body = n.content.replace(/^---\n[\s\S]*?\n---\n?/, "");
+  // Reading view: frontmatter is shown as chips instead; srs ID anchors are
+  // plumbing; cloze markers collapse to their visible text.
+  const body = n.content
+    .replace(/^---\n[\s\S]*?\n---\n?/, "")
+    .replace(/\s*<!--\s*srs:[0-9a-f]+\s*-->/g, "")
+    .replace(/\{\{c\d+::(.*?)(?:::.*?)?\}\}/g, "$1");
 
   return (
     <article className="space-y-4">
@@ -122,15 +97,24 @@ export default function NoteReader() {
               #{t}
             </span>
           ))}
-          {n.sources.map((s) => (
-            <span
-              key={s}
-              className="rounded bg-violet-100 px-1.5 py-0.5 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-              title="cited source"
-            >
-              ⌘ {s}
-            </span>
-          ))}
+          {n.sources.map((key) => {
+            const src = sourceByKey.get(key);
+            const chip = (
+              <span
+                className={`rounded bg-violet-100 px-1.5 py-0.5 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 ${src ? "hover:bg-violet-200 dark:hover:bg-violet-900/70" : ""}`}
+                title={src ? src.title : "cited source (not uploaded yet)"}
+              >
+                📄 {key}
+              </span>
+            );
+            return src ? (
+              <Link key={key} to={`/sources/${src.id}`}>
+                {chip}
+              </Link>
+            ) : (
+              <span key={key}>{chip}</span>
+            );
+          })}
         </div>
       )}
 

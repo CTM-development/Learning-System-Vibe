@@ -12,6 +12,7 @@ import (
 
 	"github.com/CTM-development/learning-system-vibe/internal/config"
 	"github.com/CTM-development/learning-system-vibe/internal/mdsync"
+	"github.com/CTM-development/learning-system-vibe/internal/sources"
 	"github.com/CTM-development/learning-system-vibe/internal/srs"
 	"github.com/CTM-development/learning-system-vibe/internal/store"
 )
@@ -21,6 +22,7 @@ type Server struct {
 	Store     *store.Store
 	Syncer    *mdsync.Syncer
 	Scheduler *srs.Scheduler
+	Sources   *sources.Manager
 	Config    config.Config
 	Version   string
 }
@@ -48,6 +50,10 @@ func (s *Server) Handler(dist fs.FS) http.Handler {
 	mux.HandleFunc("PATCH /api/cards/{id}", s.handlePatchCard)
 	mux.HandleFunc("GET /api/decks", s.handleListDecks)
 	mux.HandleFunc("GET /api/search", s.handleSearch)
+	mux.HandleFunc("POST /api/sources", s.handleUploadSource)
+	mux.HandleFunc("GET /api/sources", s.handleListSources)
+	mux.HandleFunc("GET /api/sources/{id}", s.handleGetSource)
+	mux.HandleFunc("GET /api/sources/{id}/file", s.handleSourceFile)
 	mux.Handle("/", spaHandler(dist))
 	return mux
 }

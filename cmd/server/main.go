@@ -19,6 +19,7 @@ import (
 	"github.com/CTM-development/learning-system-vibe/internal/api"
 	"github.com/CTM-development/learning-system-vibe/internal/config"
 	"github.com/CTM-development/learning-system-vibe/internal/mdsync"
+	"github.com/CTM-development/learning-system-vibe/internal/sources"
 	"github.com/CTM-development/learning-system-vibe/internal/srs"
 	"github.com/CTM-development/learning-system-vibe/internal/store"
 	"github.com/CTM-development/learning-system-vibe/web"
@@ -78,7 +79,14 @@ func run(configPath string) error {
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: (&api.Server{Store: st, Syncer: syncer, Scheduler: srs.NewScheduler(), Config: cfg, Version: version}).Handler(dist),
+		Handler: (&api.Server{
+			Store:     st,
+			Syncer:    syncer,
+			Scheduler: srs.NewScheduler(),
+			Sources:   &sources.Manager{Store: st, AttachmentsDir: cfg.AttachmentsDir},
+			Config:    cfg,
+			Version:   version,
+		}).Handler(dist),
 	}
 
 	errCh := make(chan error, 1)

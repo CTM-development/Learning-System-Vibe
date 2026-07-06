@@ -100,11 +100,21 @@ func (s *Server) handleListDecks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, decks)
 }
 
+// handleSearch searches notes and extracted PDF text in one call.
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	hits, err := s.Store.SearchNotes(r.URL.Query().Get("q"), 20)
+	q := r.URL.Query().Get("q")
+	notes, err := s.Store.SearchNotes(q, 20)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, hits)
+	srcs, err := s.Store.SearchSources(q, 20)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"notes":   notes,
+		"sources": srcs,
+	})
 }
