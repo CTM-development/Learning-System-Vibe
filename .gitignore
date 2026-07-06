@@ -1,0 +1,24 @@
+# Go build output
+bin/
+
+# Frontend build output (kept out of git; .gitkeep keeps go:embed happy)
+web/dist/*
+!web/dist/.gitkeep
+web/node_modules/
+
+# Runtime data (default paths, root only; real deployments configure their own)
+learning.db
+learning.db-wal
+learning.db-shm
+/notes/
+/attachments/
+
+# TypeScript incremental build state
+web/tsconfig.tsbuildinfo
+
+# Editor/OS noise
+.DS_Store
+*.swp
+
+# Claude Code local settings temp files
+.claude/*.tmp.*
