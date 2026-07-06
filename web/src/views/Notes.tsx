@@ -6,6 +6,7 @@ import {
   apiPost,
   type NoteSummary,
   type OpenQuestion,
+  type SearchHit,
   type Stage,
   type SyncResult,
 } from "../api";
@@ -26,6 +27,7 @@ export const stageColors: Record<string, string> = {
 
 export default function Notes() {
   const [filter, setFilter] = useState<Stage | "all">("all");
+  const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
 
   const notes = useQuery({
@@ -43,6 +45,18 @@ export default function Notes() {
 
   return (
     <div className="space-y-6">
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search notes (full text)…"
+        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      />
+
+      {search.trim().length >= 2 ? (
+        <SearchResults query={search.trim()} />
+      ) : (
+        <>
       <div className="flex flex-wrap items-center gap-2">
         {stageFilters.map((f) => (
           <button
@@ -117,7 +131,42 @@ export default function Notes() {
       </ul>
 
       <OpenQuestions />
+        </>
+      )}
     </div>
+  );
+}
+
+function SearchResults({ query }: { query: string }) {
+  const hits = useQuery({
+    queryKey: ["search", query],
+    queryFn: () => apiGet<SearchHit[]>(`/api/search?q=${encodeURIComponent(query)}`),
+  });
+
+  if (hits.isPending) return <p className="text-sm text-zinc-500">Searching…</p>;
+  if (hits.isError) return <p className="text-sm text-red-600">{String(hits.error)}</p>;
+  if (hits.data.length === 0)
+    return <p className="text-sm text-zinc-500">No matches for “{query}”.</p>;
+
+  return (
+    <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
+      {hits.data.map((h) => (
+        <li key={h.path}>
+          <Link
+            to={`/notes/${h.path}`}
+            className="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+          >
+            <span className="font-medium">{h.title}</span>
+            <span className="ml-2 text-xs text-zinc-400">{h.path}</span>
+            {/* snippet is server-generated: plain text + <mark> only */}
+            <p
+              className="mt-1 text-sm text-zinc-500 [&_mark]:rounded-sm [&_mark]:bg-amber-200 [&_mark]:px-0.5 dark:[&_mark]:bg-amber-500/40 dark:[&_mark]:text-inherit"
+              dangerouslySetInnerHTML={{ __html: h.snippet }}
+            />
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 

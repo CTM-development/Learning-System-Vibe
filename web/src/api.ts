@@ -97,6 +97,71 @@ export interface SessionsResponse {
   serverTime: string;
 }
 
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return handle<T>(
+    await fetch(path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export interface StatsSummary {
+  total_cards: number;
+  suspended_cards: number;
+  orphaned_cards: number;
+  due_now: number;
+  new_remaining: number;
+  reviews_today: number;
+  time_today_ms: number;
+  retention_30: number; // -1 = no data
+  avg_review_ms: number;
+}
+
+export interface DayCount {
+  date: string; // YYYY-MM-DD
+  count: number;
+}
+
+export interface ForecastResponse {
+  forecast: DayCount[];
+  overdue: number;
+}
+
+export interface TimeBucket {
+  key: string;
+  ms: number;
+  count: number;
+}
+
+export interface TimeResponse {
+  by_kind: TimeBucket[];
+  by_deck: TimeBucket[];
+}
+
+export interface CardInfo {
+  id: string;
+  note_path: string;
+  type: string;
+  front: string;
+  back: string;
+  deck: string;
+  tags: string[];
+  suspended: boolean;
+  orphaned: boolean;
+  due: string;
+  state: number;
+  reps: number;
+  lapses: number;
+}
+
+export interface SearchHit {
+  path: string;
+  title: string;
+  snippet: string;
+}
+
 export interface SyncResult {
   notes: number;
   cards_created: number;

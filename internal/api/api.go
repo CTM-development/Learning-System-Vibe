@@ -40,6 +40,14 @@ func (s *Server) Handler(dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/sessions/stop", s.handleSessionStop)
 	mux.HandleFunc("GET /api/sessions", s.handleListSessions)
 	mux.HandleFunc("POST /api/events", s.handlePostEvent)
+	mux.HandleFunc("GET /api/stats/summary", s.handleStatsSummary)
+	mux.HandleFunc("GET /api/stats/heatmap", s.handleStatsHeatmap)
+	mux.HandleFunc("GET /api/stats/forecast", s.handleStatsForecast)
+	mux.HandleFunc("GET /api/stats/time", s.handleStatsTime)
+	mux.HandleFunc("GET /api/cards", s.handleBrowseCards)
+	mux.HandleFunc("PATCH /api/cards/{id}", s.handlePatchCard)
+	mux.HandleFunc("GET /api/decks", s.handleListDecks)
+	mux.HandleFunc("GET /api/search", s.handleSearch)
 	mux.Handle("/", spaHandler(dist))
 	return mux
 }

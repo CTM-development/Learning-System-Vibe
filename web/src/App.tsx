@@ -11,6 +11,8 @@ import {
 import Notes from "./views/Notes";
 import NoteReader from "./views/NoteReader";
 import Review from "./views/Review";
+import Cards from "./views/Cards";
+import Stats from "./views/Stats";
 
 const views = [
   { path: "/review", label: "Review" },
@@ -30,15 +32,9 @@ export default function App() {
           <Route path="/review" element={<Review />} />
           <Route path="/notes" element={<Notes />} />
           <Route path="/notes/*" element={<NoteReader />} />
-          {views
-            .filter((v) => v.path !== "/notes" && v.path !== "/review")
-            .map((v) => (
-              <Route
-                key={v.path}
-                path={v.path}
-                element={<Placeholder label={v.label} />}
-              />
-            ))}
+          <Route path="/cards" element={<Cards />} />
+          <Route path="/stats" element={<Stats />} />
+          <Route path="/sources" element={<Placeholder label="Sources" />} />
         </Routes>
       </main>
     </div>
