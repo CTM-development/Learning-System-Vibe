@@ -1,6 +1,15 @@
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, type NoteDetail, type Source } from "../api";
+import {
+  apiGet,
+  apiPost,
+  type ChatMessage,
+  type LLMStatus,
+  type NoteDetail,
+  type Source,
+  type TutorResponse,
+} from "../api";
 import { stageColors } from "./Notes";
 import Markdown from "../Markdown";
 import { useReadTimer } from "../useReadTimer";
@@ -34,6 +43,42 @@ export default function NoteReader() {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
     },
   });
+
+  const llmStatus = useQuery({
+    queryKey: ["llm", "status"],
+    queryFn: () => apiGet<LLMStatus>("/api/llm/status"),
+  });
+  const [tutorOpen, setTutorOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+
+  // The reader doesn't remount between notes (same route pattern) — the
+  // tutor transcript must not leak from one note into the next.
+  useEffect(() => {
+    setTutorOpen(false);
+    setMessages([]);
+    setInput("");
+  }, [path]);
+
+  const tutor = useMutation({
+    mutationFn: (transcript: ChatMessage[]) =>
+      apiPost<TutorResponse>("/api/llm/tutor", {
+        note_path: path,
+        messages: transcript,
+      }),
+    onSuccess: (res) => {
+      setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
+    },
+  });
+
+  const sendMessage = (e: FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || tutor.isPending) return;
+    const next: ChatMessage[] = [...messages, { role: "user", content: input }];
+    setMessages(next);
+    setInput("");
+    tutor.mutate(next);
+  };
 
   if (note.isPending) {
     return <p className="text-sm text-zinc-500">Loading…</p>;
@@ -161,6 +206,91 @@ export default function NoteReader() {
       <p className="text-xs text-zinc-400">
         {n.card_count} card{n.card_count === 1 ? "" : "s"} from this note
       </p>
+
+      {llmStatus.data?.configured &&
+        (tutorOpen ? (
+          <section className="space-y-3 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Tutor
+              </h2>
+              <button
+                type="button"
+                onClick={() => setTutorOpen(false)}
+                className="text-xs text-zinc-400 hover:underline"
+              >
+                Close
+              </button>
+            </div>
+
+            {messages.length > 0 && (
+              <div className="space-y-2">
+                {messages.map((m, i) =>
+                  m.role === "user" ? (
+                    <div key={i} className="flex justify-end">
+                      <div className="max-w-[80%] rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">
+                        {m.content}
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      key={i}
+                      className="prose prose-zinc max-w-none text-sm dark:prose-invert"
+                    >
+                      <Markdown>{m.content}</Markdown>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+
+            {tutor.isPending && (
+              <p className="text-xs text-zinc-500">Tutor is thinking…</p>
+            )}
+            {tutor.isError && (
+              <p className="text-sm text-red-600">
+                {String(tutor.error)}{" "}
+                <button
+                  type="button"
+                  onClick={() => tutor.mutate(messages)}
+                  className="underline"
+                >
+                  Retry
+                </button>
+              </p>
+            )}
+
+            <form onSubmit={sendMessage} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={tutor.isPending}
+                placeholder="Ask a question about this note…"
+                className="flex-1 rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+              <button
+                type="submit"
+                disabled={tutor.isPending || !input.trim()}
+                className="rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                Send
+              </button>
+            </form>
+
+            <p className="text-xs text-zinc-400">
+              Grounded in this note · hints before answers
+            </p>
+          </section>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setTutorOpen(true)}
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            💬 Ask the tutor about this note
+          </button>
+        ))}
     </article>
   );
 }

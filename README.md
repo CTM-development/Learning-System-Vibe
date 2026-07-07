@@ -39,12 +39,15 @@ variables override the file. Defaults in parentheses.
 | `llm_daily_tokens`| `LEARN_LLM_DAILY_TOKENS` | `300000`    |
 
 The OpenRouter key enables the Generate view (LLM card proposals with a
-human accept/edit step) and the Wiki view (articles grounded in your notes
+human accept/edit step), the Wiki view (articles grounded in your notes
 and PDF text via search, saved as ordinary notes under `notes/wiki/`; red
-`[[wikilinks]]` anywhere in the app offer generation). The key stays
-server-side; generation is grounded strictly in your own content, calls are
-logged to `llm_calls`, and the daily token budget hard-stops further calls
-when exhausted.
+`[[wikilinks]]` anywhere in the app offer generation), typed-answer
+grading in Review ("Type answers" toggle — the LLM grades your recall
+against the card's back and suggests a rating; you still press the button),
+and a per-note tutor chat in the reader (grounded in the note, hints
+before answers). The key stays server-side; generation is grounded
+strictly in your own content, calls are logged to `llm_calls`, and the
+daily token budget hard-stops further calls when exhausted.
 
 Everything on disk is portable: the notes directory (markdown), the
 attachments directory (PDFs), and one SQLite file. Back up = copy those three.

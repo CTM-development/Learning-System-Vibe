@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   apiGet,
   apiPost,
+  type GradeResponse,
+  type LLMStatus,
   type QueueCard,
   type QueueResponse,
   type TimeBucket,
@@ -21,6 +23,12 @@ function assetBaseFor(notePath: string): string {
   return i === -1 ? "" : notePath.slice(0, i + 1);
 }
 
+const verdictColors = {
+  correct: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  partial: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  incorrect: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+} as const;
+
 export default function Review() {
   const queryClient = useQueryClient();
   const [deck, setDeck] = useState("");
@@ -30,6 +38,13 @@ export default function Review() {
     queryKey: ["decks"],
     queryFn: () => apiGet<TimeBucket[]>("/api/decks"),
   });
+
+  const status = useQuery({
+    queryKey: ["llm", "status"],
+    queryFn: () => apiGet<LLMStatus>("/api/llm/status"),
+  });
+  const [typeAnswers, setTypeAnswers] = useState(false);
+  const [answer, setAnswer] = useState("");
 
   const params = new URLSearchParams();
   if (deck) params.set("deck", deck);
@@ -58,6 +73,19 @@ export default function Review() {
   const cards: QueueCard[] = queue.data ? [...queue.data.due, ...queue.data.new] : [];
   const card = cards[position];
   const isCram = queue.data?.cram === true;
+
+  const grade = useMutation({
+    mutationFn: () =>
+      apiPost<GradeResponse>("/api/llm/grade", {
+        card_id: card.id,
+        answer,
+        elapsed_ms: Date.now() - shownAt.current,
+      }),
+    onSuccess: () => {
+      setRevealed(true);
+      queryClient.invalidateQueries({ queryKey: ["llm", "status"] });
+    },
+  });
 
   const rate = useCallback(
     async (rating: number) => {
@@ -126,6 +154,9 @@ export default function Review() {
 
   useEffect(() => {
     shownAt.current = Date.now();
+    setAnswer("");
+    grade.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.id]);
 
   if (queue.isPending) return <p className="text-sm text-zinc-500">Loading queue…</p>;
@@ -165,6 +196,16 @@ export default function Review() {
         <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
           cram — schedule still updates, due dates ignored
         </span>
+      )}
+      {status.data?.configured && (
+        <label className="flex cursor-pointer items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={typeAnswers}
+            onChange={(e) => setTypeAnswers(e.target.checked)}
+          />
+          Type answers
+        </label>
       )}
       <div className="flex-1" />
       {done > 0 && (
@@ -231,6 +272,25 @@ export default function Review() {
         )}
       </div>
 
+      {revealed && grade.data && (
+        <div className="space-y-1.5 rounded-lg border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <span
+            className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${verdictColors[grade.data.grade.verdict]}`}
+          >
+            {grade.data.grade.verdict}
+          </span>
+          <p>{grade.data.grade.feedback}</p>
+          {grade.data.grade.missing && (
+            <p className="text-zinc-500">Missing: {grade.data.grade.missing}</p>
+          )}
+          <p className="text-xs text-zinc-500">
+            Suggested:{" "}
+            {ratings.find((r) => r.value === grade.data?.grade.suggested_rating)?.label ??
+              grade.data.grade.suggested_rating}
+          </p>
+        </div>
+      )}
+
       {revealed ? (
         <div className="grid grid-cols-4 gap-2">
           {ratings.map((r) => (
@@ -238,12 +298,50 @@ export default function Review() {
               key={r.value}
               type="button"
               onClick={() => void rate(r.value)}
-              className={`rounded-md px-3 py-3 text-sm font-medium text-white transition-colors ${r.color}`}
+              className={`rounded-md px-3 py-3 text-sm font-medium text-white transition-colors ${r.color} ${
+                grade.data?.grade.suggested_rating === r.value
+                  ? "ring-2 ring-zinc-900 ring-offset-1 dark:ring-zinc-100"
+                  : ""
+              }`}
             >
               {r.label}
               <span className="ml-1 hidden text-white/60 sm:inline">{r.key}</span>
             </button>
           ))}
+        </div>
+      ) : typeAnswers ? (
+        <div className="space-y-2">
+          <textarea
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.ctrlKey) {
+                e.preventDefault();
+                if (answer.trim() && !grade.isPending) grade.mutate();
+              }
+            }}
+            rows={3}
+            placeholder="Type your answer, then check it…"
+            className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          {grade.isError && <p className="text-sm text-red-600">{String(grade.error)}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!answer.trim() || grade.isPending}
+              onClick={() => grade.mutate()}
+              className="rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            >
+              {grade.isPending ? "Checking…" : "Check answer"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRevealed(true)}
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Reveal without answering
+            </button>
+          </div>
         </div>
       ) : (
         <button

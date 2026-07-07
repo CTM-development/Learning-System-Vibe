@@ -1,7 +1,9 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -81,6 +83,31 @@ func (s *Store) BrowseCards(q, deck, status string) ([]CardInfo, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// GetCard returns one card with its schedule state.
+func (s *Store) GetCard(id string) (CardInfo, error) {
+	var c CardInfo
+	var tags string
+	err := s.DB.QueryRow(`
+		SELECT c.id, c.note_path, c.type, c.front, c.back, c.deck, c.tags,
+		       c.suspended, c.orphaned_at IS NOT NULL, cs.due, cs.state, cs.reps, cs.lapses
+		FROM cards c
+		JOIN card_schedule cs ON cs.card_id = c.id
+		WHERE c.id = ?`, id).
+		Scan(&c.ID, &c.NotePath, &c.Type, &c.Front, &c.Back, &c.Deck,
+			&tags, &c.Suspended, &c.Orphaned, &c.Due, &c.State, &c.Reps, &c.Lapses)
+	if errors.Is(err, sql.ErrNoRows) {
+		return c, fmt.Errorf("card %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return c, err
+	}
+	json.Unmarshal([]byte(tags), &c.Tags)
+	if c.Tags == nil {
+		c.Tags = []string{}
+	}
+	return c, nil
 }
 
 // SetCardSuspended toggles a card's suspended flag.

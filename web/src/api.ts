@@ -230,6 +230,30 @@ export interface AcceptResponse {
   card_ids: string[];
 }
 
+export interface GradeResult {
+  verdict: "correct" | "partial" | "incorrect";
+  feedback: string;
+  missing?: string;
+  suggested_rating: number;
+}
+
+export interface GradeResponse {
+  grade: GradeResult;
+  model: string;
+  usage: GenerateResponse["usage"];
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface TutorResponse {
+  reply: string;
+  model: string;
+  usage: GenerateResponse["usage"];
+}
+
 export interface WikiGenerateResponse {
   path: string;
   model?: string;
