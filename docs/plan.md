@@ -215,6 +215,7 @@ Local notes retrieval (FTS first, embeddings later) · source-grounded generatio
 - **M7 — LLM wiki**: generate article → saved to `notes/wiki/*.md` → red-link generation flow; retrieval grounding via FTS (notes + PDF text); safeguards from the phase-2 list.
 - **M8 — Free-text grading + tutor chat**: rubric-graded open questions logged to `activity_events`; per-note tutor with hint-before-answer behavior.
 - **M9 — Error log** (phase 3 starts): triage queue over failed reviews/answers, one-click skippable root-cause capture in the review flow, repair actions with linked note + due date surfacing on Today until resolved, cause × deck analytics.
+- **M10 — Paper notes & Thoughts** (spec: [paper-notes-plan.md](paper-notes-plan.md)): paper is the primary capture medium for first/second-pass reading; digitization is an entry ramp into the skim→deep→synthesis flow. Three shippable stages: (a) scan bundles as citable `scan` sources (phone-camera upload) + the `type: thought` note kind with `thoughts/` folder and Notes filter; (b) side-by-side transcription workbench (scan left, markdown editor right; save = staged note citing the scan; doubles as the Thought create form; real `note_edit` timing); (c) "Draft with AI" via OpenRouter vision — faithful-transcription-only prompt, `[illegible]`/`[diagram]` markers, no card syntax, mandatory human review, provenance + budget as everywhere.
 
 The remaining phase-3 and phase-4 items get numbered milestones as they are scheduled.
 
