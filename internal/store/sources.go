@@ -87,6 +87,18 @@ func (s *Store) IndexSourceText(id int64, title, content string) error {
 	return err
 }
 
+// SourceText returns a source's extracted full text ("" when never
+// indexed or extraction failed).
+func (s *Store) SourceText(id int64) (string, error) {
+	var text string
+	err := s.DB.QueryRow(
+		`SELECT content FROM sources_fts WHERE source_id = ?`, id).Scan(&text)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return text, err
+}
+
 // SourceSearchHit is one FTS match over extracted source text.
 type SourceSearchHit struct {
 	SourceID int64  `json:"source_id"`

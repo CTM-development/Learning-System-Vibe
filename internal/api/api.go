@@ -67,6 +67,7 @@ func (s *Server) Handler(dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/llm/models", s.handleLLMModels)
 	mux.HandleFunc("POST /api/llm/generate-cards", s.handleGenerateCards)
 	mux.HandleFunc("POST /api/llm/accept-cards", s.handleAcceptCards)
+	mux.HandleFunc("POST /api/wiki/generate", s.handleGenerateWiki)
 	mux.Handle("/", spaHandler(dist))
 	return mux
 }

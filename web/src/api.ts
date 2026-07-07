@@ -230,6 +230,13 @@ export interface AcceptResponse {
   card_ids: string[];
 }
 
+export interface WikiGenerateResponse {
+  path: string;
+  model?: string;
+  usage?: GenerateResponse["usage"];
+  existing: boolean;
+}
+
 export interface StaleNote {
   path: string;
   title: string;

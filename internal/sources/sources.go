@@ -51,7 +51,7 @@ func (m *Manager) SavePDF(filename, title, key string, r io.Reader) (store.Sourc
 	if key == "" {
 		key = base
 	}
-	key, err = m.uniqueKey(slugify(key))
+	key, err = m.uniqueKey(Slugify(key))
 	if err != nil {
 		return store.SourceRow{}, err
 	}
@@ -95,7 +95,7 @@ func (m *Manager) CreateReference(kind, title, key, url string) (store.SourceRow
 	if key == "" {
 		key = title
 	}
-	key, err := m.uniqueKey(slugify(key))
+	key, err := m.uniqueKey(Slugify(key))
 	if err != nil {
 		return store.SourceRow{}, err
 	}
@@ -153,8 +153,8 @@ func (m *Manager) uniqueKey(key string) (string, error) {
 	}
 }
 
-// slugify lowercases and reduces a string to [a-z0-9-].
-func slugify(s string) string {
+// Slugify lowercases and reduces a string to [a-z0-9-].
+func Slugify(s string) string {
 	var b strings.Builder
 	lastDash := true // suppress leading dash
 	for _, r := range strings.ToLower(s) {
