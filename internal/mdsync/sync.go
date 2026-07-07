@@ -154,6 +154,7 @@ func (s *Syncer) syncFile(rel string, usedAnchors map[string]bool, seenCards map
 		Frontmatter: parsed.Frontmatter,
 		Stage:       parsed.Stage,
 		Status:      parsed.Status,
+		Type:        parsed.Type,
 		Tags:        parsed.Tags,
 		Sources:     parsed.Sources,
 		Mtime:       info.ModTime().Unix(),

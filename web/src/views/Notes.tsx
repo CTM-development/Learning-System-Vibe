@@ -6,6 +6,7 @@ import {
   apiPatch,
   apiPost,
   type NoteSummary,
+  type NoteType,
   type OpenQuestion,
   type SearchResponse,
   type Stage,
@@ -19,6 +20,12 @@ const stageFilters: { value: Stage | "all"; label: string }[] = [
   { value: "synthesis", label: "Synthesis" },
 ];
 
+const typeFilters: { value: NoteType | "all"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "reading", label: "Reading" },
+  { value: "thought", label: "Thoughts" },
+];
+
 export const stageColors: Record<string, string> = {
   skim: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
   deep: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300",
@@ -28,15 +35,19 @@ export const stageColors: Record<string, string> = {
 
 export default function Notes() {
   const [filter, setFilter] = useState<Stage | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<NoteType | "all">("all");
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
 
   const notes = useQuery({
-    queryKey: ["notes", filter],
-    queryFn: () =>
-      apiGet<NoteSummary[]>(
-        filter === "all" ? "/api/notes" : `/api/notes?stage=${filter}`,
-      ),
+    queryKey: ["notes", filter, typeFilter],
+    queryFn: () => {
+      const q = new URLSearchParams();
+      if (filter !== "all") q.set("stage", filter);
+      if (typeFilter !== "all") q.set("type", typeFilter);
+      const qs = q.toString();
+      return apiGet<NoteSummary[]>(qs ? `/api/notes?${qs}` : "/api/notes");
+    },
   });
 
   const sync = useMutation({
@@ -54,7 +65,17 @@ export default function Notes() {
         className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       />
 
-      <QuickCapture />
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <QuickCapture />
+        </div>
+        <Link
+          to="/workbench?type=thought"
+          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          + New thought
+        </Link>
+      </div>
 
       {search.trim().length >= 2 ? (
         <SearchResults query={search.trim()} />
@@ -68,6 +89,21 @@ export default function Notes() {
             onClick={() => setFilter(f.value)}
             className={`rounded-full px-3 py-1 text-sm transition-colors ${
               filter === f.value
+                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        <span className="mx-1 text-zinc-300 dark:text-zinc-700">|</span>
+        {typeFilters.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => setTypeFilter(f.value)}
+            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+              typeFilter === f.value
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
             }`}
@@ -117,6 +153,11 @@ export default function Notes() {
               className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
             >
               <span className="font-medium">{n.title}</span>
+              {n.type === "thought" && (
+                <span className="rounded bg-fuchsia-100 px-1.5 py-0.5 text-xs text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300">
+                  thought
+                </span>
+              )}
               {n.stage && (
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${stageColors[n.stage] ?? ""}`}

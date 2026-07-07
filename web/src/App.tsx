@@ -15,6 +15,7 @@ import Cards from "./views/Cards";
 import Stats from "./views/Stats";
 import Sources from "./views/Sources";
 import SourceViewer from "./views/SourceViewer";
+import Workbench from "./views/Workbench";
 import Generate from "./views/Generate";
 import Today from "./views/Today";
 import Wiki from "./views/Wiki";
@@ -25,6 +26,7 @@ const views = [
   { path: "/review", label: "Review" },
   { path: "/notes", label: "Notes" },
   { path: "/sources", label: "Sources" },
+  { path: "/workbench", label: "Workbench" },
   { path: "/cards", label: "Cards" },
   { path: "/errors", label: "Errors" },
   { path: "/stats", label: "Stats" },
@@ -47,6 +49,7 @@ export default function App() {
           <Route path="/stats" element={<Stats />} />
           <Route path="/sources" element={<Sources />} />
           <Route path="/sources/:id" element={<SourceViewer />} />
+          <Route path="/workbench" element={<Workbench />} />
           <Route path="/generate" element={<Generate />} />
           <Route path="/wiki" element={<Wiki />} />
           <Route path="/errors" element={<Errors />} />

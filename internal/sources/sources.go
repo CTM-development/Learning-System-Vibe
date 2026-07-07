@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ledongthuc/pdf"
 
@@ -21,6 +22,13 @@ import (
 
 // MaxUploadBytes caps a single PDF upload (128 MiB).
 const MaxUploadBytes = 128 << 20
+
+// MaxScanPageBytes caps one scan page image (32 MiB) — phone photos are a
+// few MiB; anything bigger is a mistake.
+const MaxScanPageBytes = 32 << 20
+
+// MaxScanPages caps the number of pages in one scan bundle.
+const MaxScanPages = 100
 
 // Manager stores source files and their index entries.
 type Manager struct {
@@ -80,6 +88,106 @@ func (m *Manager) SavePDF(filename, title, key string, r io.Reader) (store.Sourc
 		return src, err
 	}
 	return src, nil
+}
+
+// SaveScan stores an ordered bundle of page images as one scan source.
+// Pages land in scans/<key>/page-NN.<ext>; the ordered filenames go into
+// meta so the viewer and the transcriber can page through them. Only
+// JPEG, PNG and WebP pages are accepted.
+func (m *Manager) SaveScan(title, key string, pages []io.Reader) (store.SourceRow, error) {
+	if len(pages) == 0 {
+		return store.SourceRow{}, fmt.Errorf("a scan needs at least one page image")
+	}
+	if len(pages) > MaxScanPages {
+		return store.SourceRow{}, fmt.Errorf("too many pages (%d, max %d)", len(pages), MaxScanPages)
+	}
+
+	type page struct {
+		name string
+		data []byte
+	}
+	stored := make([]page, 0, len(pages))
+	names := make([]string, 0, len(pages))
+	for i, r := range pages {
+		data, err := io.ReadAll(io.LimitReader(r, MaxScanPageBytes+1))
+		if err != nil {
+			return store.SourceRow{}, err
+		}
+		if len(data) > MaxScanPageBytes {
+			return store.SourceRow{}, fmt.Errorf("page %d exceeds %d MiB limit", i+1, MaxScanPageBytes>>20)
+		}
+		ext, ok := imageExt(data)
+		if !ok {
+			return store.SourceRow{}, fmt.Errorf("page %d is not a JPEG, PNG or WebP image", i+1)
+		}
+		name := fmt.Sprintf("page-%02d.%s", i+1, ext)
+		stored = append(stored, page{name: name, data: data})
+		names = append(names, name)
+	}
+
+	if title == "" {
+		title = "Scan " + time.Now().Format("2006-01-02")
+	}
+	if key == "" {
+		key = title
+	}
+	key, err := m.uniqueKey(Slugify(key))
+	if err != nil {
+		return store.SourceRow{}, err
+	}
+
+	relDir := filepath.Join("scans", key)
+	absDir := filepath.Join(m.AttachmentsDir, relDir)
+	if err := os.MkdirAll(absDir, 0o755); err != nil {
+		return store.SourceRow{}, err
+	}
+	for _, p := range stored {
+		if err := os.WriteFile(filepath.Join(absDir, p.name), p.data, 0o644); err != nil {
+			os.RemoveAll(absDir)
+			return store.SourceRow{}, err
+		}
+	}
+
+	metaData, err := json.Marshal(map[string]any{"pages": names})
+	if err != nil {
+		os.RemoveAll(absDir)
+		return store.SourceRow{}, err
+	}
+	src, err := m.Store.CreateSource("scan", key, filepath.ToSlash(relDir), title, string(metaData))
+	if err != nil {
+		os.RemoveAll(absDir)
+		return store.SourceRow{}, err
+	}
+	// Title-only index: scans have no extracted text (the transcript note
+	// becomes the searchable form).
+	if err := m.Store.IndexSourceText(src.ID, title, ""); err != nil {
+		return src, err
+	}
+	return src, nil
+}
+
+// ScanPages returns a scan source's ordered page filenames from meta.
+func ScanPages(src store.SourceRow) []string {
+	var meta struct {
+		Pages []string `json:"pages"`
+	}
+	if err := json.Unmarshal([]byte(src.Meta), &meta); err != nil {
+		return nil
+	}
+	return meta.Pages
+}
+
+// imageExt sniffs the storage extension from magic bytes.
+func imageExt(data []byte) (string, bool) {
+	switch {
+	case bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}):
+		return "jpg", true
+	case bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")):
+		return "png", true
+	case len(data) >= 12 && bytes.HasPrefix(data, []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")):
+		return "webp", true
+	}
+	return "", false
 }
 
 // CreateReference registers a file-less source: a URL or a book. The title

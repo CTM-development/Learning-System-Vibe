@@ -36,6 +36,7 @@ func (s *Server) Handler(dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("POST /api/sync", s.handleSync)
 	mux.HandleFunc("GET /api/notes", s.handleListNotes)
+	mux.HandleFunc("POST /api/notes", s.handleCreateNote)
 	mux.HandleFunc("GET /api/notes/{path...}", s.handleGetNote)
 	mux.HandleFunc("POST /api/notes/stage", s.handleSetStage)
 	mux.HandleFunc("GET /api/notes-assets/{path...}", s.handleNoteAsset)
@@ -63,9 +64,11 @@ func (s *Server) Handler(dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/sources", s.handleListSources)
 	mux.HandleFunc("GET /api/sources/{id}", s.handleGetSource)
 	mux.HandleFunc("GET /api/sources/{id}/file", s.handleSourceFile)
+	mux.HandleFunc("GET /api/sources/{id}/page/{n}", s.handleScanPage)
 	mux.HandleFunc("GET /api/llm/status", s.handleLLMStatus)
 	mux.HandleFunc("GET /api/llm/models", s.handleLLMModels)
 	mux.HandleFunc("POST /api/llm/generate-cards", s.handleGenerateCards)
+	mux.HandleFunc("POST /api/llm/transcribe", s.handleTranscribe)
 	mux.HandleFunc("POST /api/llm/accept-cards", s.handleAcceptCards)
 	mux.HandleFunc("POST /api/wiki/generate", s.handleGenerateWiki)
 	mux.HandleFunc("POST /api/llm/grade", s.handleGradeAnswer)
@@ -102,7 +105,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListNotes(w http.ResponseWriter, r *http.Request) {
-	notes, err := s.Store.ListNotes(r.URL.Query().Get("stage"))
+	notes, err := s.Store.ListNotes(r.URL.Query().Get("stage"), r.URL.Query().Get("type"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

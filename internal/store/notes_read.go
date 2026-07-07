@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // NoteSummary is the list-view projection of a note.
@@ -13,6 +14,7 @@ type NoteSummary struct {
 	Title     string   `json:"title"`
 	Stage     string   `json:"stage"`
 	Status    string   `json:"status"`
+	Type      string   `json:"type"` // "reading" | "thought"
 	Tags      []string `json:"tags"`
 	Sources   []string `json:"sources"`
 	Mtime     int64    `json:"mtime"`
@@ -41,7 +43,7 @@ type OpenQuestion struct {
 var ErrNotFound = errors.New("not found")
 
 const noteSummaryQuery = `
-	SELECT n.path, n.title, COALESCE(n.stage,''), COALESCE(n.status,''),
+	SELECT n.path, n.title, COALESCE(n.stage,''), COALESCE(n.status,''), n.type,
 	       n.tags, n.sources, n.mtime,
 	       (SELECT COUNT(*) FROM cards c WHERE c.note_path = n.path AND c.orphaned_at IS NULL)
 	FROM notes n`
@@ -49,7 +51,7 @@ const noteSummaryQuery = `
 func scanNoteSummary(scan func(dest ...any) error) (NoteSummary, error) {
 	var s NoteSummary
 	var tags, sources string
-	err := scan(&s.Path, &s.Title, &s.Stage, &s.Status, &tags, &sources, &s.Mtime, &s.CardCount)
+	err := scan(&s.Path, &s.Title, &s.Stage, &s.Status, &s.Type, &tags, &sources, &s.Mtime, &s.CardCount)
 	if err != nil {
 		return s, err
 	}
@@ -64,13 +66,22 @@ func scanNoteSummary(scan func(dest ...any) error) (NoteSummary, error) {
 	return s, nil
 }
 
-// ListNotes returns all notes, optionally filtered by stage, newest first.
-func (s *Store) ListNotes(stage string) ([]NoteSummary, error) {
+// ListNotes returns all notes, optionally filtered by stage and/or type
+// (reading | thought), newest first.
+func (s *Store) ListNotes(stage, noteType string) ([]NoteSummary, error) {
 	query := noteSummaryQuery
+	var where []string
 	var args []any
 	if stage != "" {
-		query += ` WHERE n.stage = ?`
+		where = append(where, `n.stage = ?`)
 		args = append(args, stage)
+	}
+	if noteType != "" {
+		where = append(where, `n.type = ?`)
+		args = append(args, noteType)
+	}
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
 	query += ` ORDER BY n.mtime DESC`
 

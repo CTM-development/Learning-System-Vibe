@@ -14,6 +14,7 @@ type NoteRow struct {
 	Frontmatter map[string]any
 	Stage       string
 	Status      string
+	Type        string // "reading" | "thought"
 	Tags        []string
 	Sources     []string
 	Mtime       int64
@@ -36,16 +37,21 @@ func (s *Store) UpsertNote(n NoteRow) error {
 	fm, _ := json.Marshal(n.Frontmatter)
 	tags, _ := json.Marshal(n.Tags)
 	sources, _ := json.Marshal(n.Sources)
+	noteType := n.Type
+	if noteType == "" {
+		noteType = "reading"
+	}
 	_, err := s.DB.Exec(`
-		INSERT INTO notes (path, title, frontmatter, stage, status, tags, sources, mtime, content)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO notes (path, title, frontmatter, stage, status, type, tags, sources, mtime, content)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			title = excluded.title, frontmatter = excluded.frontmatter,
 			stage = excluded.stage, status = excluded.status,
+			type = excluded.type,
 			tags = excluded.tags, sources = excluded.sources,
 			mtime = excluded.mtime, content = excluded.content`,
 		n.Path, n.Title, string(fm), nullIfEmpty(n.Stage), nullIfEmpty(n.Status),
-		string(tags), string(sources), n.Mtime, n.Content)
+		noteType, string(tags), string(sources), n.Mtime, n.Content)
 	if err != nil {
 		return fmt.Errorf("upsert note %s: %w", n.Path, err)
 	}

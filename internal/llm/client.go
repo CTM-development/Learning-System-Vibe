@@ -27,10 +27,40 @@ func (c *Client) http() *http.Client {
 	return &http.Client{Timeout: 120 * time.Second}
 }
 
-// Message is one chat turn.
+// Message is one chat turn. Content carries plain text; when Parts is
+// set it wins and the message is sent as OpenAI-style multimodal content
+// parts (text + image_url) — used for vision requests.
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	Parts   []Part `json:"-"`
+}
+
+// Part is one multimodal content element.
+type Part struct {
+	Type     string    `json:"type"` // "text" | "image_url"
+	Text     string    `json:"text,omitempty"`
+	ImageURL *ImageRef `json:"image_url,omitempty"`
+}
+
+// ImageRef wraps an image URL; uploads use data: URIs.
+type ImageRef struct {
+	URL string `json:"url"`
+}
+
+// MarshalJSON emits string content by default and the parts array when
+// Parts is set.
+func (m Message) MarshalJSON() ([]byte, error) {
+	if len(m.Parts) > 0 {
+		return json.Marshal(struct {
+			Role    string `json:"role"`
+			Content []Part `json:"content"`
+		}{m.Role, m.Parts})
+	}
+	return json.Marshal(struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}{m.Role, m.Content})
 }
 
 // Usage is the token/cost accounting OpenRouter reports per call.

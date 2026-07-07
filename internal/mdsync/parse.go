@@ -20,6 +20,7 @@ type ParsedNote struct {
 	Frontmatter map[string]any
 	Stage       string
 	Status      string
+	Type        string // "reading" (default) | "thought"
 	Tags        []string
 	Sources     []string
 	Content     string
@@ -87,6 +88,10 @@ func Parse(relPath, content string) (*ParsedNote, error) {
 	}
 	n.Stage = fmString(n.Frontmatter, "stage")
 	n.Status = fmString(n.Frontmatter, "status")
+	n.Type = fmString(n.Frontmatter, "type")
+	if n.Type == "" {
+		n.Type = "reading"
+	}
 	n.Title = fmString(n.Frontmatter, "title")
 	n.Tags = fmStrings(n.Frontmatter, "tags")
 	n.Sources = fmStrings(n.Frontmatter, "sources")

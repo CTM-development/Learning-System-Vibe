@@ -43,11 +43,14 @@ export interface Health {
 
 export type Stage = "" | "skim" | "deep" | "synthesis";
 
+export type NoteType = "reading" | "thought";
+
 export interface NoteSummary {
   path: string;
   title: string;
   stage: Stage;
   status: string;
+  type: NoteType;
   tags: string[];
   sources: string[];
   mtime: number;
@@ -188,12 +191,46 @@ export interface SearchResponse {
 
 export interface Source {
   id: number;
-  kind: "pdf" | "url" | "book";
+  kind: "pdf" | "url" | "book" | "scan";
   key: string;
   path: string;
   title: string;
   meta: string;
   added_at: string;
+}
+
+// scanPageCount reads a scan source's page count from its meta JSON.
+// Page n (1-based) is served at /api/sources/{id}/page/{n}.
+export function scanPageCount(src: Source): number {
+  try {
+    const meta = JSON.parse(src.meta) as { pages?: string[] };
+    return meta.pages?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+// POST /api/notes — the workbench save: a transcribed reading note or a
+// born-digital Thought (server places thoughts in thoughts/YYYY-MM-DD-slug.md).
+export interface CreateNoteRequest {
+  title: string;
+  type?: NoteType; // default "reading"
+  stage?: Stage; // reading notes only
+  folder?: string; // reading notes only; relative, slugified server-side
+  tags?: string[];
+  sources?: string[]; // citation keys; must exist
+  body?: string;
+  transcribed_by?: string; // model id when the draft came from AI
+  elapsed_ms?: number; // workbench editing time → note_edit event
+}
+
+// POST /api/llm/transcribe {source_id, model?} — AI transcript draft of a
+// scan's pages; nothing is saved until the human submits the note.
+export interface TranscribeResponse {
+  text: string;
+  model: string;
+  usage: GenerateResponse["usage"];
+  source_key: string;
 }
 
 export interface LLMStatus {

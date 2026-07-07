@@ -2,18 +2,22 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, type Source } from "../api";
 import { useReadTimer } from "../useReadTimer";
+import ScanPager from "../components/ScanPager";
 
-// In-browser PDF viewer. Time spent here is logged as pdf_read events
-// against the source id.
+// In-browser PDF/scan viewer. Time spent here is logged as pdf_read or
+// scan_read events against the source id, depending on kind.
 export default function SourceViewer() {
   const { id = "" } = useParams();
-  useReadTimer("pdf_read", id ? `source:${id}` : "");
 
   const source = useQuery({
     queryKey: ["source", id],
     queryFn: () => apiGet<Source>(`/api/sources/${id}`),
     enabled: id !== "",
   });
+  useReadTimer(
+    source.data?.kind === "scan" ? "scan_read" : "pdf_read",
+    id ? `source:${id}` : "",
+  );
 
   if (source.isPending) return <p className="text-sm text-zinc-500">Loading…</p>;
   if (source.isError)
@@ -28,6 +32,29 @@ export default function SourceViewer() {
 
   const s = source.data;
   const fileUrl = `/api/sources/${s.id}/file`;
+
+  if (s.kind === "scan") {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link to="/sources" className="text-sm text-zinc-500 hover:underline">
+            ← Sources
+          </Link>
+          <span className="font-medium">{s.title}</span>
+          <code className="rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+            {s.key}
+          </code>
+          <Link
+            to={`/workbench?scan=${s.id}`}
+            className="ml-auto rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            Transcribe →
+          </Link>
+        </div>
+        <ScanPager source={s} />
+      </div>
+    );
+  }
 
   // URL and book references have no stored file — show the reference card.
   if (s.kind !== "pdf") {
