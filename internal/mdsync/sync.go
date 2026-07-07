@@ -86,6 +86,11 @@ func (s *Syncer) SyncAll() (Result, error) {
 	}
 	res.CardsOrphaned = len(vanished)
 
+	// Wikilink targets can only be resolved once every note is in place.
+	if err := s.Store.ResolveNoteLinks(); err != nil {
+		return res, err
+	}
+
 	if err := s.Store.LogEvent("sync", "", 0, 0, res); err != nil {
 		return res, err
 	}
@@ -154,6 +159,10 @@ func (s *Syncer) syncFile(rel string, usedAnchors map[string]bool, seenCards map
 		Mtime:       info.ModTime().Unix(),
 		Content:     parsed.Content,
 	}); err != nil {
+		return err
+	}
+
+	if err := s.Store.SetNoteLinks(rel, parsed.Links); err != nil {
 		return err
 	}
 

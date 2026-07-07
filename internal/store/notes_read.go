@@ -19,10 +19,13 @@ type NoteSummary struct {
 	CardCount int      `json:"card_count"`
 }
 
-// NoteDetail adds the raw markdown content.
+// NoteDetail adds the raw markdown content plus the link graph around the
+// note: outgoing wikilinks (resolved or red) and backlinks from other notes.
 type NoteDetail struct {
 	NoteSummary
-	Content string `json:"content"`
+	Content   string     `json:"content"`
+	Links     []NoteLink `json:"links"`
+	Backlinks []NoteRef  `json:"backlinks"`
 }
 
 // OpenQuestion is one row of the open-question queue.
@@ -99,8 +102,79 @@ func (s *Store) GetNote(path string) (NoteDetail, error) {
 		return d, err
 	}
 	d.NoteSummary = n
-	err = s.DB.QueryRow(`SELECT content FROM notes WHERE path = ?`, path).Scan(&d.Content)
+	if err := s.DB.QueryRow(`SELECT content FROM notes WHERE path = ?`, path).Scan(&d.Content); err != nil {
+		return d, err
+	}
+	if d.Links, err = s.NoteLinks(path); err != nil {
+		return d, err
+	}
+	d.Backlinks, err = s.Backlinks(path)
 	return d, err
+}
+
+// SetQuestionStatus updates one open question's lifecycle status.
+func (s *Store) SetQuestionStatus(id int64, status string) error {
+	switch status {
+	case "open", "carded", "folded", "dropped":
+	default:
+		return fmt.Errorf("invalid question status %q", status)
+	}
+	res, err := s.DB.Exec(`UPDATE open_questions SET status = ? WHERE id = ?`, status, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("question %d: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+// StaleNote is a note stuck in an early stage.
+type StaleNote struct {
+	Path     string `json:"path"`
+	Title    string `json:"title"`
+	Stage    string `json:"stage"`
+	IdleDays int    `json:"idle_days"`
+}
+
+// StaleNotes returns skim/deep notes untouched for at least minIdleDays,
+// stalest first.
+func (s *Store) StaleNotes(minIdleDays, limit int) ([]StaleNote, error) {
+	rows, err := s.DB.Query(`
+		SELECT path, title, stage,
+		       CAST((strftime('%s','now') - mtime) / 86400 AS INTEGER)
+		FROM notes
+		WHERE stage IN ('skim', 'deep')
+		  AND mtime <= strftime('%s','now') - ? * 86400
+		ORDER BY mtime LIMIT ?`, minIdleDays, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []StaleNote{}
+	for rows.Next() {
+		var n StaleNote
+		if err := rows.Scan(&n.Path, &n.Title, &n.Stage, &n.IdleDays); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// CountLeeches counts active cards at or past the leech lapse threshold.
+func (s *Store) CountLeeches() (int, error) {
+	var n int
+	err := s.DB.QueryRow(`
+		SELECT COUNT(*) FROM cards c
+		JOIN card_schedule cs ON cs.card_id = c.id
+		WHERE c.suspended = 0 AND c.orphaned_at IS NULL AND cs.lapses >= ?`,
+		LeechLapses).Scan(&n)
+	return n, err
 }
 
 // ListOpenQuestions returns questions, optionally filtered by status,

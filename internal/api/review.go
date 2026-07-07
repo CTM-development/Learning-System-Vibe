@@ -10,10 +10,33 @@ import (
 )
 
 // handleQueue returns today's review queue: due cards plus new cards up to
-// the daily limit.
+// the daily limit, optionally scoped to a deck. With cram=1 (requires a
+// deck) it instead returns every active deck card, weakest first, ignoring
+// due dates — for exam prep.
 func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
-	due, err := s.Store.DueCards(now)
+	deck := r.URL.Query().Get("deck")
+
+	if r.URL.Query().Get("cram") == "1" {
+		if deck == "" {
+			writeError(w, http.StatusBadRequest, errors.New("cram mode needs a deck"))
+			return
+		}
+		cards, err := s.Store.CramCards(now, deck, 500)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"due":           cards,
+			"new":           []store.QueueCard{},
+			"new_remaining": 0,
+			"cram":          true,
+		})
+		return
+	}
+
+	due, err := s.Store.DueCards(now, deck)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -24,7 +47,7 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	remaining := s.Config.NewPerDay - introduced
-	newCards, err := s.Store.NewCards(remaining)
+	newCards, err := s.Store.NewCards(now, remaining, deck)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -43,6 +66,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		CardID    string `json:"card_id"`
 		Rating    int    `json:"rating"`
 		ElapsedMs int64  `json:"elapsed_ms"`
+		Cram      bool   `json:"cram"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CardID == "" {
 		writeError(w, http.StatusBadRequest, errors.New("want JSON body {card_id, rating, elapsed_ms}"))
@@ -69,17 +93,72 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	payload := map[string]any{
+		"rating": req.Rating,
+		"before": before,
+		"after":  after,
+	}
+	if req.Cram {
+		payload["cram"] = true
+	}
 	err = s.Store.LogEvent("card_review", req.CardID, req.ElapsedMs,
-		s.Store.ActiveSessionID(), map[string]any{
-			"rating": req.Rating,
-			"before": before,
-			"after":  after,
-		})
+		s.Store.ActiveSessionID(), payload)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, after)
+}
+
+// handleUndoReview reverts the most recent not-yet-undone review: the
+// card's schedule is restored to the pre-review snapshot stored in the
+// event payload. The log stays append-only — a review_undo event marks the
+// review as reverted instead of deleting it.
+func (s *Server) handleUndoReview(w http.ResponseWriter, r *http.Request) {
+	eventID, cardID, before, err := s.Store.LatestUndoableReview()
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := s.Store.UpdateSchedule(before); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := s.Store.LogEvent("review_undo", cardID, 0, s.Store.ActiveSessionID(),
+		map[string]any{"event_id": eventID}); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"card_id":  cardID,
+		"schedule": before,
+	})
+}
+
+// handleBuryCard hides a card until local tomorrow without rating it.
+func (s *Server) handleBuryCard(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	now := time.Now()
+	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	if err := s.Store.BuryCard(id, tomorrow); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := s.Store.LogEvent("card_bury", id, 0, s.Store.ActiveSessionID(), nil); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"buried_until": tomorrow.UTC().Format(time.RFC3339),
+	})
 }
 
 // handleSessionStart starts a session (ending any active one).

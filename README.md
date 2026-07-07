@@ -32,6 +32,7 @@ variables override the file. Defaults in parentheses.
 | `notes_dir`       | `LEARN_NOTES_DIR`      | `notes`       |
 | `attachments_dir` | `LEARN_ATTACHMENTS_DIR`| `attachments` |
 | `db_path`         | `LEARN_DB_PATH`        | `learning.db` |
+| `backups_dir`     | `LEARN_BACKUPS_DIR`    | `backups`     |
 | `new_per_day`     | `LEARN_NEW_PER_DAY`    | `10`          |
 | `openrouter_api_key` | `LEARN_OPENROUTER_API_KEY` | *(unset — LLM features off)* |
 | `llm_model`       | `LEARN_LLM_MODEL`      | `anthropic/claude-haiku-4.5` |
@@ -44,6 +45,11 @@ daily token budget hard-stops further calls when exhausted.
 
 Everything on disk is portable: the notes directory (markdown), the
 attachments directory (PDFs), and one SQLite file. Back up = copy those three.
+The server additionally snapshots the database daily into `backups_dir`
+(keeping the last 7) — the review history is the one thing you can't
+reconstruct from files. Set `LEARN_BACKUPS_DIR=""` to disable. Keeping the
+notes directory in git is recommended: sync writes ID anchors into your
+files, and version control is the safety net for your prose.
 
 ## Run as a service (systemd)
 

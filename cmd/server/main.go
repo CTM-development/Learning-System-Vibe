@@ -73,6 +73,31 @@ func run(configPath string) error {
 		}
 	}()
 
+	// Daily DB snapshots: the review history is the one thing that isn't a
+	// plain file on disk, so it gets its own safety net.
+	if cfg.BackupsDir != "" {
+		backup := func() {
+			if path, err := st.Backup(cfg.BackupsDir); err != nil {
+				log.Printf("db backup failed: %v", err)
+			} else if path != "" {
+				log.Printf("db backup written: %s", path)
+			}
+		}
+		backup()
+		go func() {
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					backup()
+				case <-watchCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+
 	dist, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		return err

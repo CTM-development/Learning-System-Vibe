@@ -1,7 +1,13 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiGet, type Source } from "../api";
+import { ApiError, apiGet, apiPost, type Source } from "../api";
+
+export const kindIcons: Record<Source["kind"], string> = {
+  pdf: "📄",
+  url: "🔗",
+  book: "📕",
+};
 
 export default function Sources() {
   const queryClient = useQueryClient();
@@ -69,6 +75,8 @@ export default function Sources() {
         {error && <span className="text-sm text-red-600">{error}</span>}
       </form>
 
+      <AddReference />
+
       {sources.isPending && <p className="text-sm text-zinc-500">Loading…</p>}
       {sources.isError && (
         <p className="text-sm text-red-600">{String(sources.error)}</p>
@@ -88,7 +96,7 @@ export default function Sources() {
               to={`/sources/${s.id}`}
               className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
             >
-              <span aria-hidden>📄</span>
+              <span aria-hidden>{kindIcons[s.kind] ?? "📄"}</span>
               <span className="font-medium">{s.title}</span>
               <code className="rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
                 {s.key}
@@ -101,5 +109,83 @@ export default function Sources() {
         ))}
       </ul>
     </div>
+  );
+}
+
+// AddReference registers a citable URL or book without a file: it gets a
+// citation key for note frontmatter just like an uploaded PDF.
+function AddReference() {
+  const queryClient = useQueryClient();
+  const [kind, setKind] = useState<"url" | "book">("url");
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [key, setKey] = useState("");
+
+  const create = useMutation({
+    mutationFn: () =>
+      apiPost<Source>("/api/sources", {
+        kind,
+        title,
+        url: kind === "url" ? url : undefined,
+        key: key || undefined,
+      }),
+    onSuccess: () => {
+      setTitle("");
+      setUrl("");
+      setKey("");
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+    },
+  });
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (title.trim()) create.mutate();
+      }}
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      <select
+        value={kind}
+        onChange={(e) => setKind(e.target.value as "url" | "book")}
+        className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      >
+        <option value="url">URL</option>
+        <option value="book">Book</option>
+      </select>
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={kind === "book" ? "Title, author, year" : "Title"}
+        className="w-64 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      />
+      {kind === "url" && (
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://…"
+          className="w-64 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+        />
+      )}
+      <input
+        type="text"
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+        placeholder="Citation key (optional)"
+        className="w-44 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      />
+      <button
+        type="submit"
+        disabled={create.isPending || !title.trim()}
+        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      >
+        {create.isPending ? "Adding…" : "Add reference"}
+      </button>
+      {create.isError && (
+        <span className="text-sm text-red-600">{String(create.error)}</span>
+      )}
+    </form>
   );
 }

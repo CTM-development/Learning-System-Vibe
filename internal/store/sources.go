@@ -19,11 +19,15 @@ type SourceRow struct {
 	AddedAt string `json:"added_at"`
 }
 
-// CreateSource inserts a source row.
-func (s *Store) CreateSource(kind, key, path, title string) (SourceRow, error) {
+// CreateSource inserts a source row. meta is a JSON object string; empty
+// means "{}".
+func (s *Store) CreateSource(kind, key, path, title, meta string) (SourceRow, error) {
+	if meta == "" {
+		meta = "{}"
+	}
 	res, err := s.DB.Exec(
-		`INSERT INTO sources (kind, key, path, title) VALUES (?, ?, ?, ?)`,
-		kind, key, path, title)
+		`INSERT INTO sources (kind, key, path, title, meta) VALUES (?, ?, ?, ?, ?)`,
+		kind, key, path, title, meta)
 	if err != nil {
 		return SourceRow{}, fmt.Errorf("create source %s: %w", key, err)
 	}

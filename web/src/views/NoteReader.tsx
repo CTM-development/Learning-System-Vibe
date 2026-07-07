@@ -51,11 +51,27 @@ export default function NoteReader() {
 
   const n = note.data;
   // Reading view: frontmatter is shown as chips instead; srs ID anchors are
-  // plumbing; cloze markers collapse to their visible text.
+  // plumbing; cloze markers collapse to their visible text; wikilinks become
+  // real links — to the note when resolved, to wiki generation when red.
+  const linkTargets = new Map(n.links.map((l) => [l.target, l.to_path]));
   const body = n.content
     .replace(/^---\n[\s\S]*?\n---\n?/, "")
     .replace(/\s*<!--\s*srs:[0-9a-f]+\s*-->/g, "")
-    .replace(/\{\{c\d+::(.*?)(?:::.*?)?\}\}/g, "$1");
+    .replace(/\{\{c\d+::(.*?)(?:::.*?)?\}\}/g, "$1")
+    .replace(
+      /\[\[([^[\]|]+)(?:\|([^[\]]*))?\]\]/g,
+      (whole, target: string, label?: string) => {
+        const t = target.trim();
+        const text = (label ?? "").trim() || t;
+        const to = linkTargets.get(t);
+        if (to) return `[${text}](/notes/${to})`;
+        if (to === "") return `[${text}](/wiki?topic=${encodeURIComponent(t)})`;
+        return whole; // inside a code fence — parser didn't record it
+      },
+    );
+  const assetBase = path.includes("/")
+    ? path.slice(0, path.lastIndexOf("/") + 1)
+    : "";
 
   return (
     <article className="space-y-4">
@@ -119,8 +135,28 @@ export default function NoteReader() {
       )}
 
       <div className="prose prose-zinc max-w-none rounded-lg border border-zinc-200 bg-white p-6 dark:prose-invert dark:border-zinc-800 dark:bg-zinc-900">
-        <Markdown>{body}</Markdown>
+        <Markdown assetBase={assetBase}>{body}</Markdown>
       </div>
+
+      {n.backlinks.length > 0 && (
+        <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Linked from
+          </h2>
+          <ul className="flex flex-wrap gap-2 text-sm">
+            {n.backlinks.map((b) => (
+              <li key={b.path}>
+                <Link
+                  to={`/notes/${b.path}`}
+                  className="rounded bg-zinc-100 px-2 py-1 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                >
+                  {b.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <p className="text-xs text-zinc-400">
         {n.card_count} card{n.card_count === 1 ? "" : "s"} from this note

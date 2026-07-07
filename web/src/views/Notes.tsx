@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   apiGet,
+  apiPatch,
   apiPost,
   type NoteSummary,
   type OpenQuestion,
@@ -52,6 +53,8 @@ export default function Notes() {
         placeholder="Search notes (full text)…"
         className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       />
+
+      <QuickCapture />
 
       {search.trim().length >= 2 ? (
         <SearchResults query={search.trim()} />
@@ -202,10 +205,68 @@ function SearchResults({ query }: { query: string }) {
   );
 }
 
+// QuickCapture appends a fleeting question to notes/inbox.md so nothing is
+// lost when there is no editor at hand (couch, phone).
+function QuickCapture() {
+  const [text, setText] = useState("");
+  const queryClient = useQueryClient();
+
+  const capture = useMutation({
+    mutationFn: (t: string) => apiPost("/api/capture", { text: t }),
+    onSuccess: () => {
+      setText("");
+      queryClient.invalidateQueries({ queryKey: ["questions"] });
+      queryClient.invalidateQueries({ queryKey: ["notes"] });
+    },
+  });
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) capture.mutate(text.trim());
+      }}
+      className="flex gap-2"
+    >
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Quick capture: a question or thought → inbox.md"
+        className="flex-1 rounded-md border border-dashed border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      />
+      <button
+        type="submit"
+        disabled={capture.isPending || !text.trim()}
+        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      >
+        {capture.isPending ? "Saving…" : "Capture"}
+      </button>
+      {capture.isError && (
+        <span className="self-center text-sm text-red-600">{String(capture.error)}</span>
+      )}
+    </form>
+  );
+}
+
+const questionActions = [
+  { status: "carded", label: "→ carded", title: "turned into card(s)" },
+  { status: "folded", label: "→ folded", title: "folded into an essay" },
+  { status: "dropped", label: "✕", title: "drop this question" },
+] as const;
+
 function OpenQuestions() {
+  const queryClient = useQueryClient();
   const questions = useQuery({
     queryKey: ["questions", "open"],
     queryFn: () => apiGet<OpenQuestion[]>("/api/questions?status=open"),
+  });
+
+  const setStatus = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      apiPatch(`/api/questions/${id}`, { status }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["questions"] }),
   });
 
   if (!questions.data || questions.data.length === 0) return null;
@@ -219,15 +280,29 @@ function OpenQuestions() {
         {questions.data.map((q) => (
           <li
             key={q.id}
-            className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900"
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900"
           >
-            {q.text}{" "}
+            <span>{q.text}</span>
             <Link
               to={`/notes/${q.note_path}`}
               className="text-xs text-zinc-400 hover:underline"
             >
               {q.note_path}
             </Link>
+            <span className="ml-auto flex gap-1">
+              {questionActions.map((a) => (
+                <button
+                  key={a.status}
+                  type="button"
+                  title={a.title}
+                  disabled={setStatus.isPending}
+                  onClick={() => setStatus.mutate({ id: q.id, status: a.status })}
+                  className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                >
+                  {a.label}
+                </button>
+              ))}
+            </span>
           </li>
         ))}
       </ul>

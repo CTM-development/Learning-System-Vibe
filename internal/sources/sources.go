@@ -5,6 +5,7 @@ package sources
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -64,7 +65,7 @@ func (m *Manager) SavePDF(filename, title, key string, r io.Reader) (store.Sourc
 		return store.SourceRow{}, err
 	}
 
-	src, err := m.Store.CreateSource("pdf", key, filepath.ToSlash(relPath), title)
+	src, err := m.Store.CreateSource("pdf", key, filepath.ToSlash(relPath), title, "")
 	if err != nil {
 		os.Remove(absPath)
 		return store.SourceRow{}, err
@@ -76,6 +77,41 @@ func (m *Manager) SavePDF(filename, title, key string, r io.Reader) (store.Sourc
 		text = ""
 	}
 	if err := m.Store.IndexSourceText(src.ID, title, text); err != nil {
+		return src, err
+	}
+	return src, nil
+}
+
+// CreateReference registers a file-less source: a URL or a book. The title
+// is indexed so the source is findable via search; url lands in meta.
+func (m *Manager) CreateReference(kind, title, key, url string) (store.SourceRow, error) {
+	if kind != "url" && kind != "book" {
+		return store.SourceRow{}, fmt.Errorf("invalid source kind %q (want url or book)", kind)
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return store.SourceRow{}, fmt.Errorf("title is required")
+	}
+	if key == "" {
+		key = title
+	}
+	key, err := m.uniqueKey(slugify(key))
+	if err != nil {
+		return store.SourceRow{}, err
+	}
+	meta := ""
+	if url = strings.TrimSpace(url); url != "" {
+		data, err := json.Marshal(map[string]string{"url": url})
+		if err != nil {
+			return store.SourceRow{}, err
+		}
+		meta = string(data)
+	}
+	src, err := m.Store.CreateSource(kind, key, "", title, meta)
+	if err != nil {
+		return store.SourceRow{}, err
+	}
+	if err := m.Store.IndexSourceText(src.ID, title, ""); err != nil {
 		return src, err
 	}
 	return src, nil

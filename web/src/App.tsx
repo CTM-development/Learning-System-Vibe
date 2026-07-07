@@ -16,8 +16,10 @@ import Stats from "./views/Stats";
 import Sources from "./views/Sources";
 import SourceViewer from "./views/SourceViewer";
 import Generate from "./views/Generate";
+import Today from "./views/Today";
 
 const views = [
+  { path: "/today", label: "Today" },
   { path: "/review", label: "Review" },
   { path: "/notes", label: "Notes" },
   { path: "/sources", label: "Sources" },
@@ -32,7 +34,8 @@ export default function App() {
       <Header />
       <main className="mx-auto max-w-4xl px-4 py-6">
         <Routes>
-          <Route path="/" element={<Navigate to="/review" replace />} />
+          <Route path="/" element={<Navigate to="/today" replace />} />
+          <Route path="/today" element={<Today />} />
           <Route path="/review" element={<Review />} />
           <Route path="/notes" element={<Notes />} />
           <Route path="/notes/*" element={<NoteReader />} />

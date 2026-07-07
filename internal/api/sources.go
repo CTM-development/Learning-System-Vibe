@@ -1,17 +1,40 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/CTM-development/learning-system-vibe/internal/sources"
 	"github.com/CTM-development/learning-system-vibe/internal/store"
 )
 
-// handleUploadSource accepts a multipart PDF upload (field "file", optional
-// "title" and "key" fields) and returns the created source.
+// handleUploadSource accepts either a multipart PDF upload (field "file",
+// optional "title" and "key" fields) or a JSON body {kind: url|book, title,
+// key?, url?} registering a file-less reference. Returns the created source.
 func (s *Server) handleUploadSource(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		var req struct {
+			Kind  string `json:"kind"`
+			Title string `json:"title"`
+			Key   string `json:"key"`
+			URL   string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("want JSON body {kind, title, key?, url?}"))
+			return
+		}
+		src, err := s.Sources.CreateReference(req.Kind, req.Title, req.Key, req.URL)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, src)
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, sources.MaxUploadBytes+(1<<20))
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, errors.New("want multipart form with a 'file' field"))
@@ -76,6 +99,10 @@ func (s *Server) handleGetSource(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSourceFile(w http.ResponseWriter, r *http.Request) {
 	src, ok := s.sourceFromPath(w, r)
 	if !ok {
+		return
+	}
+	if src.Kind != "pdf" || src.Path == "" {
+		writeError(w, http.StatusNotFound, errors.New("source has no stored file"))
 		return
 	}
 	path, err := s.Sources.FilePath(src)

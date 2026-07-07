@@ -25,6 +25,7 @@ type ParsedNote struct {
 	Content     string
 	Cards       []ParsedCard
 	Questions   []string
+	Links       []string // [[wikilink]] targets, deduplicated, in order
 }
 
 // ParsedCard is one card found in a note. Cards from the same cloze
@@ -55,6 +56,7 @@ var (
 	headingRe  = regexp.MustCompile(`^#{1,6}\s+(.*)$`)
 	openQHdrRe = regexp.MustCompile(`(?i)^##+\s+open\s+questions\s*$`)
 	listItemRe = regexp.MustCompile(`^\s*[-*]\s+(.*)$`)
+	wikiRe     = regexp.MustCompile(`\[\[([^\[\]|]+)(?:\|([^\[\]]*))?\]\]`)
 )
 
 // Parse parses one markdown file. relPath is the note's path relative to
@@ -140,7 +142,33 @@ func Parse(relPath, content string) (*ParsedNote, error) {
 		base := filepath.Base(relPath)
 		n.Title = strings.TrimSuffix(base, filepath.Ext(base))
 	}
+	n.Links = extractWikilinks(lines[body:])
 	return n, nil
+}
+
+// extractWikilinks collects [[target]] / [[target|label]] targets outside
+// code fences, deduplicated in order of first appearance.
+func extractWikilinks(lines []string) []string {
+	var links []string
+	seen := map[string]bool{}
+	inFence := false
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		for _, m := range wikiRe.FindAllStringSubmatch(line, -1) {
+			t := strings.TrimSpace(m[1])
+			if t != "" && !seen[t] {
+				seen[t] = true
+				links = append(links, t)
+			}
+		}
+	}
+	return links
 }
 
 // parseQABlock parses a card starting at lines[start] (which matches Q:).

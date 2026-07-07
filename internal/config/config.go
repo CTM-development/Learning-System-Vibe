@@ -17,6 +17,7 @@ type Config struct {
 	AttachmentsDir string `yaml:"attachments_dir"`
 	DBPath         string `yaml:"db_path"`
 	NewPerDay      int    `yaml:"new_per_day"` // new cards introduced per day
+	BackupsDir     string `yaml:"backups_dir"` // daily DB snapshots; "" disables
 
 	// Phase 2 (LLM via OpenRouter). The key stays server-side only.
 	OpenRouterAPIKey string `yaml:"openrouter_api_key"`
@@ -33,6 +34,7 @@ func Default() Config {
 		AttachmentsDir: "attachments",
 		DBPath:         "learning.db",
 		NewPerDay:      10,
+		BackupsDir:     "backups",
 		LLMModel:       "anthropic/claude-haiku-4.5",
 		LLMDailyTokens: 300_000,
 		LLMBaseURL:     "https://openrouter.ai/api/v1",
@@ -70,6 +72,9 @@ func Load(path string) (Config, error) {
 	}
 	if v := os.Getenv("LEARN_DB_PATH"); v != "" {
 		cfg.DBPath = v
+	}
+	if v, set := os.LookupEnv("LEARN_BACKUPS_DIR"); set {
+		cfg.BackupsDir = v // empty value disables backups
 	}
 	if v := os.Getenv("LEARN_NEW_PER_DAY"); v != "" {
 		n, err := strconv.Atoi(v)

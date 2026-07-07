@@ -56,6 +56,53 @@ func (s *Syncer) AppendQABlocks(rel, heading string, cards []QABlock) error {
 	return os.WriteFile(abs, []byte(b.String()), info.Mode())
 }
 
+// InboxNote is where quick-captured questions land in the notes tree.
+const InboxNote = "inbox.md"
+
+// AppendOpenQuestion appends one captured question to the inbox note's
+// "## Open questions" section (the file is created on first capture; the
+// section is kept last so appending at the end lands inside it). Sync
+// afterwards to pick the question up.
+func (s *Syncer) AppendOpenQuestion(text string) error {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\n", " "))
+	if text == "" {
+		return fmt.Errorf("empty capture")
+	}
+	abs := filepath.Join(s.NotesDir, InboxNote)
+
+	raw, err := os.ReadFile(abs)
+	if os.IsNotExist(err) {
+		content := "# Inbox\n\nQuick captures land here; fold them into real notes.\n\n## Open questions\n\n- " + text + "\n"
+		return os.WriteFile(abs, []byte(content), 0o644)
+	}
+	if err != nil {
+		return err
+	}
+
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(string(raw), "\n"))
+	b.WriteString("\n")
+	if !openQuestionsHeadingPresent(string(raw)) {
+		b.WriteString("\n## Open questions\n")
+	}
+	b.WriteString("- " + text + "\n")
+
+	info, err := os.Stat(abs)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(abs, []byte(b.String()), info.Mode())
+}
+
+func openQuestionsHeadingPresent(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		if openQHdrRe.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
 // sanitizeBlockText makes text safe inside a Q/A block: no blank lines
 // (they terminate the block) and no lines that would start a new Q:/A:.
 func sanitizeBlockText(s string) string {

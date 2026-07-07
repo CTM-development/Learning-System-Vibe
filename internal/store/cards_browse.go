@@ -22,8 +22,12 @@ type CardInfo struct {
 	Lapses    int      `json:"lapses"`
 }
 
+// LeechLapses is the lapse count from which a card counts as a leech —
+// repeatedly forgotten, likely badly formulated and worth rewriting.
+const LeechLapses = 4
+
 // BrowseCards lists cards filtered by free text (front/back LIKE), deck and
-// status ("", "active", "suspended", "orphaned"), due first.
+// status ("", "active", "suspended", "orphaned", "leech"), due first.
 func (s *Store) BrowseCards(q, deck, status string) ([]CardInfo, error) {
 	query := `
 		SELECT c.id, c.note_path, c.type, c.front, c.back, c.deck, c.tags,
@@ -48,6 +52,8 @@ func (s *Store) BrowseCards(q, deck, status string) ([]CardInfo, error) {
 		query += ` AND c.suspended = 1`
 	case "orphaned":
 		query += ` AND c.orphaned_at IS NOT NULL`
+	case "leech":
+		query += fmt.Sprintf(` AND c.suspended = 0 AND c.orphaned_at IS NULL AND cs.lapses >= %d`, LeechLapses)
 	case "all":
 		// no filter
 	default:

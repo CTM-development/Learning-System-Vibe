@@ -72,6 +72,7 @@ export default function Cards() {
           className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         >
           <option value="active">Active</option>
+          <option value="leech">Leeches</option>
           <option value="suspended">Suspended</option>
           <option value="orphaned">Orphaned</option>
           <option value="all">All</option>
@@ -111,6 +112,14 @@ export default function Cards() {
                   {c.orphaned && (
                     <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800">
                       orphaned
+                    </span>
+                  )}
+                  {!c.suspended && !c.orphaned && c.lapses >= 4 && (
+                    <span
+                      className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                      title={`forgotten ${c.lapses} times — consider rewriting this card`}
+                    >
+                      leech
                     </span>
                   )}
                 </td>

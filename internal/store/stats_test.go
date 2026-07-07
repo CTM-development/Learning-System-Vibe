@@ -151,7 +151,7 @@ func TestDueForecastAndBrowse(t *testing.T) {
 		t.Errorf("suspended = %+v", suspended)
 	}
 	// Suspended card leaves the review queue.
-	due, err := s.DueCards(time.Now())
+	due, err := s.DueCards(time.Now(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

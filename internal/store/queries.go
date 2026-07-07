@@ -68,6 +68,9 @@ func (s *Store) DeleteNote(path string) error {
 	if _, err := s.DB.Exec(`DELETE FROM notes WHERE path = ?`, path); err != nil {
 		return err
 	}
+	if _, err := s.DB.Exec(`DELETE FROM note_links WHERE from_path = ?`, path); err != nil {
+		return err
+	}
 	_, err := s.DB.Exec(`DELETE FROM notes_fts WHERE path = ?`, path)
 	return err
 }

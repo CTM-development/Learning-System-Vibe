@@ -54,8 +54,20 @@ export interface NoteSummary {
   card_count: number;
 }
 
+export interface NoteLink {
+  target: string;
+  to_path: string; // "" = red link (no matching note)
+}
+
+export interface NoteRef {
+  path: string;
+  title: string;
+}
+
 export interface NoteDetail extends NoteSummary {
   content: string;
+  links: NoteLink[];
+  backlinks: NoteRef[];
 }
 
 export interface OpenQuestion {
@@ -81,6 +93,7 @@ export interface QueueResponse {
   due: QueueCard[];
   new: QueueCard[];
   new_remaining: number;
+  cram?: boolean;
 }
 
 export interface Session {
@@ -215,6 +228,21 @@ export interface GenerateResponse {
 export interface AcceptResponse {
   added: number;
   card_ids: string[];
+}
+
+export interface StaleNote {
+  path: string;
+  title: string;
+  stage: string;
+  idle_days: number;
+}
+
+export interface TodayResponse {
+  summary: StatsSummary;
+  stale_notes: StaleNote[];
+  open_questions: number;
+  oldest_questions: OpenQuestion[];
+  leeches: number;
 }
 
 export interface SyncResult {

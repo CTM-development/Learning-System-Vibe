@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -27,6 +28,9 @@ const queueCardQuery = `
 	JOIN card_schedule cs ON cs.card_id = c.id
 	WHERE c.orphaned_at IS NULL AND c.suspended = 0`
 
+// deckFilter matches a deck and its subfolders ("ml" matches "ml/dl").
+const deckFilter = ` AND (c.deck = ? OR c.deck LIKE ? || '/%')`
+
 func (s *Store) queryQueueCards(query string, args ...any) ([]QueueCard, error) {
 	rows, err := s.DB.Query(query, args...)
 	if err != nil {
@@ -44,20 +48,97 @@ func (s *Store) queryQueueCards(query string, args ...any) ([]QueueCard, error) 
 	return out, rows.Err()
 }
 
-// DueCards returns non-new cards due at or before now, oldest due first.
-func (s *Store) DueCards(now time.Time) ([]QueueCard, error) {
-	return s.queryQueueCards(
-		queueCardQuery+` AND cs.state != 0 AND cs.due <= ? ORDER BY cs.due`,
-		now.UTC().Format(time.RFC3339))
+// DueCards returns non-new, non-buried cards due at or before now, oldest
+// due first, optionally restricted to a deck (and its subfolders).
+func (s *Store) DueCards(now time.Time, deck string) ([]QueueCard, error) {
+	nowStr := now.UTC().Format(time.RFC3339)
+	query := queueCardQuery + ` AND (cs.buried_until IS NULL OR cs.buried_until <= ?)
+		AND cs.state != 0 AND cs.due <= ?`
+	args := []any{nowStr, nowStr}
+	if deck != "" {
+		query += deckFilter
+		args = append(args, deck, deck)
+	}
+	return s.queryQueueCards(query+` ORDER BY cs.due`, args...)
 }
 
-// NewCards returns up to limit never-reviewed cards, oldest first.
-func (s *Store) NewCards(limit int) ([]QueueCard, error) {
+// NewCards returns up to limit never-reviewed, non-buried cards, oldest
+// first, optionally restricted to a deck.
+func (s *Store) NewCards(now time.Time, limit int, deck string) ([]QueueCard, error) {
 	if limit <= 0 {
 		return []QueueCard{}, nil
 	}
-	return s.queryQueueCards(
-		queueCardQuery+` AND cs.state = 0 ORDER BY c.created_at, c.id LIMIT ?`, limit)
+	query := queueCardQuery + ` AND (cs.buried_until IS NULL OR cs.buried_until <= ?)
+		AND cs.state = 0`
+	args := []any{now.UTC().Format(time.RFC3339)}
+	if deck != "" {
+		query += deckFilter
+		args = append(args, deck, deck)
+	}
+	query += ` ORDER BY c.created_at, c.id LIMIT ?`
+	args = append(args, limit)
+	return s.queryQueueCards(query, args...)
+}
+
+// CramCards returns every active card in a deck regardless of due date,
+// weakest memory first (stability ascending, so new/lapsed cards lead).
+// Suspended, orphaned and buried cards stay excluded.
+func (s *Store) CramCards(now time.Time, deck string, limit int) ([]QueueCard, error) {
+	query := queueCardQuery + ` AND (cs.buried_until IS NULL OR cs.buried_until <= ?)` +
+		deckFilter + ` ORDER BY cs.stability, cs.due LIMIT ?`
+	return s.queryQueueCards(query,
+		now.UTC().Format(time.RFC3339), deck, deck, limit)
+}
+
+// BuryCard hides a card from queues until the given time (local tomorrow,
+// typically) without touching its FSRS state.
+func (s *Store) BuryCard(id string, until time.Time) error {
+	res, err := s.DB.Exec(`UPDATE card_schedule SET buried_until = ? WHERE card_id = ?`,
+		until.UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("card %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+// undoneReviewIDs is a subquery of card_review event ids already reverted
+// by a review_undo event.
+const undoneReviewIDs = `SELECT json_extract(payload, '$.event_id')
+	FROM activity_events WHERE kind = 'review_undo'`
+
+// LatestUndoableReview returns the most recent card_review event that has
+// not been undone: its event id, card id and the pre-review schedule.
+func (s *Store) LatestUndoableReview() (int64, string, srs.Schedule, error) {
+	var (
+		eventID int64
+		cardID  string
+		payload string
+	)
+	err := s.DB.QueryRow(`
+		SELECT id, ref, payload FROM activity_events
+		WHERE kind = 'card_review' AND id NOT IN (`+undoneReviewIDs+`)
+		ORDER BY id DESC LIMIT 1`).Scan(&eventID, &cardID, &payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", srs.Schedule{}, fmt.Errorf("no review to undo: %w", ErrNotFound)
+	}
+	if err != nil {
+		return 0, "", srs.Schedule{}, err
+	}
+	var body struct {
+		Before srs.Schedule `json:"before"`
+	}
+	if err := json.Unmarshal([]byte(payload), &body); err != nil {
+		return 0, "", srs.Schedule{}, fmt.Errorf("parse review payload: %w", err)
+	}
+	body.Before.CardID = cardID
+	return eventID, cardID, body.Before, nil
 }
 
 // CountNewIntroducedToday counts reviews of previously-new cards since local
@@ -68,7 +149,8 @@ func (s *Store) CountNewIntroducedToday() (int, error) {
 		SELECT COUNT(*) FROM activity_events
 		WHERE kind = 'card_review'
 		  AND json_extract(payload, '$.before.state') = 0
-		  AND date(ts, 'localtime') = date('now', 'localtime')`).Scan(&n)
+		  AND date(ts, 'localtime') = date('now', 'localtime')
+		  AND id NOT IN (`+undoneReviewIDs+`)`).Scan(&n)
 	return n, err
 }
 

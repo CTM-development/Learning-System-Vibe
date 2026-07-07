@@ -29,6 +29,44 @@ export default function SourceViewer() {
   const s = source.data;
   const fileUrl = `/api/sources/${s.id}/file`;
 
+  // URL and book references have no stored file — show the reference card.
+  if (s.kind !== "pdf") {
+    let url = "";
+    try {
+      url = (JSON.parse(s.meta) as { url?: string }).url ?? "";
+    } catch {
+      // meta stays optional
+    }
+    return (
+      <div className="space-y-3">
+        <Link to="/sources" className="text-sm text-zinc-500 hover:underline">
+          ← Sources
+        </Link>
+        <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+          <h1 className="text-lg font-semibold">
+            {s.kind === "book" ? "📕" : "🔗"} {s.title}
+          </h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Cite it from a note's frontmatter with{" "}
+            <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
+              sources: [{s.key}]
+            </code>
+          </p>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-block text-sm text-sky-600 hover:underline dark:text-sky-400"
+            >
+              {url} ↗
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col space-y-3">
       <div className="flex flex-wrap items-center gap-3">
