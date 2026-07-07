@@ -18,6 +18,7 @@ import SourceViewer from "./views/SourceViewer";
 import Generate from "./views/Generate";
 import Today from "./views/Today";
 import Wiki from "./views/Wiki";
+import Errors from "./views/Errors";
 
 const views = [
   { path: "/today", label: "Today" },
@@ -25,6 +26,7 @@ const views = [
   { path: "/notes", label: "Notes" },
   { path: "/sources", label: "Sources" },
   { path: "/cards", label: "Cards" },
+  { path: "/errors", label: "Errors" },
   { path: "/stats", label: "Stats" },
   { path: "/generate", label: "Generate" },
   { path: "/wiki", label: "Wiki" },
@@ -47,6 +49,7 @@ export default function App() {
           <Route path="/sources/:id" element={<SourceViewer />} />
           <Route path="/generate" element={<Generate />} />
           <Route path="/wiki" element={<Wiki />} />
+          <Route path="/errors" element={<Errors />} />
         </Routes>
       </main>
     </div>

@@ -104,9 +104,16 @@ func TestReviewLoop(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatalf("review: %d", res.StatusCode)
 	}
-	after := decode[srs.Schedule](t, res)
+	reviewed := decode[struct {
+		Schedule srs.Schedule `json:"schedule"`
+		EventID  int64        `json:"event_id"`
+	}](t, res)
+	after := reviewed.Schedule
 	if after.Reps != 1 || after.State == 0 {
 		t.Errorf("schedule after review = %+v", after)
+	}
+	if reviewed.EventID == 0 {
+		t.Error("review response missing event_id")
 	}
 
 	// The card leaves the new queue.

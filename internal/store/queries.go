@@ -193,12 +193,13 @@ func (s *Store) SyncOpenQuestions(notePath string, questions []string) error {
 	return nil
 }
 
-// LogEvent appends one row to the universal activity log. sessionID 0
-// means "no active session". payload is marshalled to JSON.
-func (s *Store) LogEvent(kind, ref string, elapsedMs int64, sessionID int64, payload any) error {
+// LogEvent appends one row to the universal activity log and returns its
+// id (so diagnoses like error-log entries can point back at the evidence).
+// sessionID 0 means "no active session". payload is marshalled to JSON.
+func (s *Store) LogEvent(kind, ref string, elapsedMs int64, sessionID int64, payload any) (int64, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if payload == nil {
 		data = []byte("{}")
@@ -211,11 +212,14 @@ func (s *Store) LogEvent(kind, ref string, elapsedMs int64, sessionID int64, pay
 	if elapsedMs > 0 {
 		ms = sql.NullInt64{Int64: elapsedMs, Valid: true}
 	}
-	_, err = s.DB.Exec(
+	res, err := s.DB.Exec(
 		`INSERT INTO activity_events (kind, ref, elapsed_ms, session_id, payload)
 		 VALUES (?, ?, ?, ?, ?)`,
 		kind, nullIfEmpty(ref), ms, sid, string(data))
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func (s *Store) queryStrings(query string, args ...any) ([]string, error) {

@@ -173,7 +173,7 @@ func (s *Server) handleAcceptCards(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Provenance trail: the generation event links model → note → card ids.
-	if err := s.Store.LogEvent("llm_generate", req.NotePath, 0, s.Store.ActiveSessionID(),
+	if _, err := s.Store.LogEvent("llm_generate", req.NotePath, 0, s.Store.ActiveSessionID(),
 		map[string]any{"model": req.Model, "card_ids": newIDs, "accepted": len(req.Cards)}); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

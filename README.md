@@ -1,8 +1,9 @@
 # Learning System
 
 Personal learning system: markdown notes as source of truth, Anki-style spaced
-repetition (FSRS), universal activity timing, PDF sources — served on the home
-network as a single Go binary with an embedded React frontend.
+repetition (FSRS), universal activity timing, PDF sources, and an error log
+that turns failed reviews into diagnosed, repairable learning data — served on
+the home network as a single Go binary with an embedded React frontend.
 
 Full spec and roadmap: [docs/plan.md](docs/plan.md).
 

@@ -91,7 +91,7 @@ func (s *Syncer) SyncAll() (Result, error) {
 		return res, err
 	}
 
-	if err := s.Store.LogEvent("sync", "", 0, 0, res); err != nil {
+	if _, err := s.Store.LogEvent("sync", "", 0, 0, res); err != nil {
 		return res, err
 	}
 	return res, nil

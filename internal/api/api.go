@@ -70,6 +70,11 @@ func (s *Server) Handler(dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/wiki/generate", s.handleGenerateWiki)
 	mux.HandleFunc("POST /api/llm/grade", s.handleGradeAnswer)
 	mux.HandleFunc("POST /api/llm/tutor", s.handleTutor)
+	mux.HandleFunc("GET /api/errors/triage", s.handleErrorTriage)
+	mux.HandleFunc("GET /api/errors/stats", s.handleErrorStats)
+	mux.HandleFunc("GET /api/errors", s.handleListErrors)
+	mux.HandleFunc("POST /api/errors", s.handleCreateError)
+	mux.HandleFunc("PATCH /api/errors/{id}", s.handlePatchError)
 	mux.Handle("/", spaHandler(dist))
 	return mux
 }

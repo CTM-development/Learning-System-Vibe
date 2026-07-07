@@ -94,7 +94,7 @@ func (s *Server) handleGenerateWiki(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Provenance trail, same as generated cards: model → topic → file.
-	if err := s.Store.LogEvent("llm_wiki", rel, 0, s.Store.ActiveSessionID(), map[string]any{
+	if _, err := s.Store.LogEvent("llm_wiki", rel, 0, s.Store.ActiveSessionID(), map[string]any{
 		"model":     req.Model,
 		"topic":     req.Topic,
 		"grounding": origins,

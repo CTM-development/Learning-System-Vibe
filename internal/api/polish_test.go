@@ -72,7 +72,9 @@ func TestUndoAndBury(t *testing.T) {
 	res = postJSON(t, ts.URL+"/api/reviews", map[string]any{
 		"card_id": cardID, "rating": 3, "elapsed_ms": 1200,
 	})
-	after := decode[srs.Schedule](t, res)
+	after := decode[struct {
+		Schedule srs.Schedule `json:"schedule"`
+	}](t, res).Schedule
 	if after.State == 0 {
 		t.Fatalf("review did not advance state: %+v", after)
 	}

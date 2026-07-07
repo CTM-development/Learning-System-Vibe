@@ -101,13 +101,17 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	if req.Cram {
 		payload["cram"] = true
 	}
-	err = s.Store.LogEvent("card_review", req.CardID, req.ElapsedMs,
+	eventID, err := s.Store.LogEvent("card_review", req.CardID, req.ElapsedMs,
 		s.Store.ActiveSessionID(), payload)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, after)
+	// event_id lets the client classify a failure into the error log.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schedule": after,
+		"event_id": eventID,
+	})
 }
 
 // handleUndoReview reverts the most recent not-yet-undone review: the
@@ -128,7 +132,7 @@ func (s *Server) handleUndoReview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := s.Store.LogEvent("review_undo", cardID, 0, s.Store.ActiveSessionID(),
+	if _, err := s.Store.LogEvent("review_undo", cardID, 0, s.Store.ActiveSessionID(),
 		map[string]any{"event_id": eventID}); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -152,7 +156,7 @@ func (s *Server) handleBuryCard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := s.Store.LogEvent("card_bury", id, 0, s.Store.ActiveSessionID(), nil); err != nil {
+	if _, err := s.Store.LogEvent("card_bury", id, 0, s.Store.ActiveSessionID(), nil); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -223,7 +227,7 @@ func (s *Server) handlePostEvent(w http.ResponseWriter, r *http.Request) {
 	if len(req.Payload) > 0 {
 		payload = req.Payload
 	}
-	if err := s.Store.LogEvent(req.Kind, req.Ref, req.ElapsedMs, s.Store.ActiveSessionID(), payload); err != nil {
+	if _, err := s.Store.LogEvent(req.Kind, req.Ref, req.ElapsedMs, s.Store.ActiveSessionID(), payload); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}

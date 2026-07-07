@@ -131,7 +131,12 @@ Both land in M1's schema so nothing needs retrofitting (consistent with critique
 - **Confidence rating** at review time (feeds calibration and the learner model).
 - **Problem bank**: problems tagged by concept, method, difficulty, prerequisite; **interleaved mixed sets** across related topics (eigenvalues + diagonalization + SVD + quadratic forms + Markov chains + PCA, not 20 eigenvalue drills); "choose the method before solving" tasks; delayed re-solving of failed problems; transfer tasks.
 - **Worked-example fading**: full worked solution → missing justifications → missing steps → hints only → independent problem → transfer problem. Especially for measure theory, optimization, probability derivations, Bayesian inference, algorithms, formal proofs.
-- **Error log / misconception model**: every failed card/proof/problem prompts a root-cause classification — memory failure, conceptual confusion, algebraic manipulation, wrong problem-type classification, missing prerequisite, overconfidence, careless execution, source misunderstanding — plus a repair action (e.g. "review matrix-calculus essay, solve 5 JVP cards, rewrite derivation from memory in 3 days") that feeds the scheduler. Failure becomes structured learning data.
+- **Error log / misconception model** *(pulled forward as M9, the first phase-3 milestone)*: failure becomes structured learning data.
+  - **Capture points**: card reviews rated Again and free-text answers graded incorrect (both already logged as events since phases 1–2); problem attempts join in later. Every entry references its `activity_events` row, so the diagnosis stays joined to the evidence (answer given, latency, schedule state at failure).
+  - **Never blocking**: after a failure the review UI offers a one-click, skippable root-cause prompt; anything unclassified lands in a **triage queue** to process later (linked from Today). Mandatory classification would kill the review flow.
+  - **Root-cause taxonomy** (8): memory failure, conceptual confusion, algebraic/symbolic manipulation, wrong problem-type classification, missing prerequisite, overconfidence, careless execution, source misunderstanding.
+  - **Repair actions close the loop**: free text plus optional structured parts — a linked note to rework and a due date. Open repairs surface on the Today dashboard until resolved (`resolved_at`); this is "feeds the scheduler" in its minimal honest form, and phase-3 problem repairs reuse it.
+  - **Diagnosis analytics**: breakdown by root cause × deck — the actionable seed of the phase-4 open learner model.
 - **Essay-as-learning mode**: write essay sections from memory, compare against source notes, extract claims into cards, extract open questions, track essay maturity (notes → outline → rough → rigorous → publishable), generate oral-exam questions from an essay.
 
 **Phase 4 (learner model & research workflow)**:
@@ -185,7 +190,7 @@ Parse file → for each card block: anchor present → upsert by ID (update cont
 - `sources(id, kind pdf|url|book, path, title, meta JSON, added_at)` + PDF text in FTS index
 - `open_questions(id, note_path, text, status open|carded|folded|dropped)`
 - phase 2: `llm_calls(ts, model, purpose, tokens_in/out, cost)` for budget tracking
-- phase 3: `error_log(event_id, root_cause, repair_action, resolved_at)`, `problems`, `problem_attempts` (as event kinds)
+- phase 3: `error_log(id, event_id → activity_events, card_id, root_cause, note, repair_action, repair_note_path, repair_due, created_at, resolved_at)`, `problems`, `problem_attempts` (as event kinds)
 - phase 4: `concepts(id, name, definition_ref, prerequisites…)`, paper-workflow tables
 
 ### API sketch
@@ -209,8 +214,9 @@ Local notes retrieval (FTS first, embeddings later) · source-grounded generatio
 - **M6 — OpenRouter + card generation** (phase 2 starts): server-side key, model picker, budget guard; select note → proposed cards → accept/edit → written to md with anchors + provenance.
 - **M7 — LLM wiki**: generate article → saved to `notes/wiki/*.md` → red-link generation flow; retrieval grounding via FTS (notes + PDF text); safeguards from the phase-2 list.
 - **M8 — Free-text grading + tutor chat**: rubric-graded open questions logged to `activity_events`; per-note tutor with hint-before-answer behavior.
+- **M9 — Error log** (phase 3 starts): triage queue over failed reviews/answers, one-click skippable root-cause capture in the review flow, repair actions with linked note + due date surfacing on Today until resolved, cause × deck analytics.
 
-Phases 3 (practice depth) and 4 (learner model & research workflow) remain roadmap sections; they get numbered milestones when phase 2 ships.
+The remaining phase-3 and phase-4 items get numbered milestones as they are scheduled.
 
 ---
 

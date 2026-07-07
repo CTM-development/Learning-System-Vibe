@@ -35,19 +35,19 @@ func TestSummaryAndHeatmapAndTime(t *testing.T) {
 	if err := s.UpdateSchedule(after); err != nil {
 		t.Fatal(err)
 	}
-	err = s.LogEvent("card_review", "aaa", 5000, sess.ID,
+	_, err = s.LogEvent("card_review", "aaa", 5000, sess.ID,
 		map[string]any{"rating": 3, "before": before, "after": after})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A review of a review-state card that failed (for retention). 3001ms
 	// makes the average non-integral — AVG() returns float64.
-	err = s.LogEvent("card_review", "aaa", 3001, sess.ID,
+	_, err = s.LogEvent("card_review", "aaa", 3001, sess.ID,
 		map[string]any{"rating": 1, "before": after, "after": after})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LogEvent("note_read", "n.md", 60000, sess.ID, nil); err != nil {
+	if _, err := s.LogEvent("note_read", "n.md", 60000, sess.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 

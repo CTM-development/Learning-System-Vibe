@@ -64,22 +64,25 @@ func (s *Server) handleGradeAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The attempt itself is learning data: answer + judgment, timed and
-	// session-attributed like every other activity.
-	if err := s.Store.LogEvent("free_text_answer", req.CardID, req.ElapsedMs,
+	// session-attributed like every other activity. The event id comes back
+	// to the client so a failure can be classified into the error log.
+	eventID, err := s.Store.LogEvent("free_text_answer", req.CardID, req.ElapsedMs,
 		s.Store.ActiveSessionID(), map[string]any{
 			"answer":           req.Answer,
 			"verdict":          grade.Verdict,
 			"suggested_rating": grade.SuggestedRating,
 			"model":            req.Model,
-		}); err != nil {
+		})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"grade": grade,
-		"model": req.Model,
-		"usage": usage,
+		"grade":    grade,
+		"model":    req.Model,
+		"usage":    usage,
+		"event_id": eventID,
 	})
 }
 
@@ -137,7 +140,7 @@ func (s *Server) handleTutor(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := s.Store.LogEvent("tutor_chat", req.NotePath, 0,
+	if _, err := s.Store.LogEvent("tutor_chat", req.NotePath, 0,
 		s.Store.ActiveSessionID(), map[string]any{
 			"model": req.Model,
 			"turns": len(req.Messages),

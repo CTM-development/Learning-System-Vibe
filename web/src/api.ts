@@ -241,6 +241,7 @@ export interface GradeResponse {
   grade: GradeResult;
   model: string;
   usage: GenerateResponse["usage"];
+  event_id: number;
 }
 
 export interface ChatMessage {
@@ -261,6 +262,78 @@ export interface WikiGenerateResponse {
   existing: boolean;
 }
 
+export type RootCause =
+  | "memory"
+  | "concept"
+  | "manipulation"
+  | "classification"
+  | "prerequisite"
+  | "overconfidence"
+  | "careless"
+  | "source";
+
+// Human labels for the fixed root-cause taxonomy, in display order.
+export const causeLabels: Record<RootCause, string> = {
+  memory: "memory lapse",
+  concept: "conceptual confusion",
+  manipulation: "algebra / manipulation",
+  classification: "wrong method choice",
+  prerequisite: "missing prerequisite",
+  overconfidence: "overconfidence",
+  careless: "careless slip",
+  source: "misread source",
+};
+
+export interface TriageItem {
+  event_id: number;
+  ts: string;
+  kind: "card_review" | "free_text_answer";
+  card_id: string;
+  card_front: string;
+  card_back: string;
+  deck: string;
+  answer?: string;
+  verdict?: string;
+}
+
+export interface TriageResponse {
+  items: TriageItem[];
+  causes: RootCause[];
+}
+
+export interface ErrorEntry {
+  id: number;
+  event_id: number;
+  card_id: string;
+  card_front: string;
+  deck: string;
+  note_path: string;
+  root_cause: RootCause;
+  note: string;
+  repair_action: string;
+  repair_note_path: string;
+  repair_due: string;
+  created_at: string;
+  resolved_at: string;
+}
+
+export interface CauseCount {
+  cause: RootCause;
+  deck?: string;
+  open: number;
+  total: number;
+}
+
+export interface ErrorStatsResponse {
+  by_cause: CauseCount[];
+  by_deck: CauseCount[];
+}
+
+export interface ReviewResponse {
+  schedule: unknown;
+  event_id: number;
+}
+
 export interface StaleNote {
   path: string;
   title: string;
@@ -274,6 +347,9 @@ export interface TodayResponse {
   open_questions: number;
   oldest_questions: OpenQuestion[];
   leeches: number;
+  error_triage: number;
+  open_errors: number;
+  repairs_due: ErrorEntry[];
 }
 
 export interface SyncResult {

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { apiGet, type TodayResponse } from "../api";
+import { apiGet, causeLabels, type TodayResponse } from "../api";
 import { stageColors } from "./Notes";
 
 function fmtMinutes(ms: number): string {
@@ -56,8 +56,45 @@ export default function Today() {
         )}
       </section>
 
-      {(t.leeches > 0 || t.open_questions > 0) && (
+      {t.repairs_due.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Repair tasks due
+          </h2>
+          <ul className="divide-y divide-zinc-200 rounded-lg border border-red-200 bg-white dark:divide-zinc-800 dark:border-red-900/50 dark:bg-zinc-900">
+            {t.repairs_due.map((r) => (
+              <li key={r.id}>
+                <Link
+                  to="/errors"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                >
+                  <span className="font-medium">
+                    {r.repair_action || `revisit: ${r.card_front}`}
+                  </span>
+                  <span className="rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                    {causeLabels[r.root_cause] ?? r.root_cause}
+                  </span>
+                  <span className="ml-auto text-xs text-zinc-400">
+                    due {r.repair_due}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {(t.leeches > 0 || t.open_questions > 0 || t.error_triage > 0) && (
         <section className="flex flex-wrap gap-3 text-sm">
+          {t.error_triage > 0 && (
+            <Link
+              to="/errors"
+              className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-800 hover:bg-red-100 dark:border-red-700/60 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/40"
+            >
+              <span className="font-semibold">{t.error_triage}</span> failure
+              {t.error_triage === 1 ? "" : "s"} to classify — what went wrong?
+            </Link>
+          )}
           {t.leeches > 0 && (
             <Link
               to="/cards"

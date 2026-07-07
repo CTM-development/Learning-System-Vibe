@@ -3,10 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   apiGet,
   apiPost,
+  causeLabels,
   type GradeResponse,
   type LLMStatus,
   type QueueCard,
   type QueueResponse,
+  type ReviewResponse,
+  type RootCause,
   type TimeBucket,
 } from "../api";
 import Markdown from "../Markdown";
@@ -62,6 +65,11 @@ export default function Review() {
   const shownAt = useRef(Date.now());
   // Positions of past ratings, so undo can step back to the right card.
   const undoStack = useRef<number[]>([]);
+  // After an Again rating: offer a one-click, skippable diagnosis.
+  const [pendingError, setPendingError] = useState<{
+    eventId: number;
+    front: string;
+  } | null>(null);
 
   useEffect(() => {
     setPosition(0);
@@ -97,12 +105,15 @@ export default function Review() {
       setDone((d) => d + 1);
       shownAt.current = Date.now();
       try {
-        await apiPost("/api/reviews", {
+        const res = await apiPost<ReviewResponse>("/api/reviews", {
           card_id: card.id,
           rating,
           elapsed_ms: elapsed,
           cram: isCram || undefined,
         });
+        if (rating === 1) {
+          setPendingError({ eventId: res.event_id, front: card.front });
+        }
       } finally {
         if (position + 1 >= cards.length) {
           queryClient.invalidateQueries({ queryKey: ["queue"] });
@@ -111,6 +122,19 @@ export default function Review() {
     },
     [card, revealed, position, cards.length, isCram, queryClient],
   );
+
+  const classify = async (cause: RootCause) => {
+    if (!pendingError) return;
+    const eventId = pendingError.eventId;
+    setPendingError(null);
+    try {
+      await apiPost("/api/errors", { event_id: eventId, root_cause: cause });
+      queryClient.invalidateQueries({ queryKey: ["errors"] });
+      queryClient.invalidateQueries({ queryKey: ["today"] });
+    } catch {
+      // Failure events stay in the triage queue — nothing is lost.
+    }
+  };
 
   const undo = useCallback(async () => {
     const prev = undoStack.current.pop();
@@ -121,6 +145,7 @@ export default function Review() {
       setRevealed(false);
       setDone((d) => Math.max(0, d - 1));
       shownAt.current = Date.now();
+      setPendingError(null); // the failure it refers to may just have been undone
     } catch {
       undoStack.current.push(prev); // nothing was undone server-side
     }
@@ -220,10 +245,41 @@ export default function Review() {
     </div>
   );
 
+  const errorBanner = pendingError && (
+    <div className="space-y-1.5 rounded-lg border border-red-200 bg-red-50/60 p-3 text-xs dark:border-red-900/50 dark:bg-red-950/30">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-zinc-600 dark:text-zinc-300">
+          Missed: <span className="font-medium">{pendingError.front}</span> — why?
+        </span>
+        <button
+          type="button"
+          onClick={() => setPendingError(null)}
+          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+          title="skip — it stays in the triage queue"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {(Object.keys(causeLabels) as RootCause[]).map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => void classify(c)}
+            className="rounded-full border border-zinc-300 px-2 py-0.5 text-zinc-600 hover:bg-white dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            {causeLabels[c]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   if (!card) {
     return (
-      <div className="space-y-4">
+      <div className="mx-auto max-w-2xl space-y-4">
         {scopeBar}
+        {errorBanner}
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
           <h1 className="text-xl font-semibold">
             {done > 0 ? `Done — ${done} card${done === 1 ? "" : "s"} reviewed 🎉` : "Nothing due"}
@@ -243,6 +299,7 @@ export default function Review() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       {scopeBar}
+      {errorBanner}
       <div className="flex items-center justify-between text-xs text-zinc-500">
         <span>
           {position + 1} / {cards.length}

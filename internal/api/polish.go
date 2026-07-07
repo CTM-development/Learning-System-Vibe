@@ -56,7 +56,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := s.Store.LogEvent("capture", "", 0, s.Store.ActiveSessionID(),
+	if _, err := s.Store.LogEvent("capture", "", 0, s.Store.ActiveSessionID(),
 		map[string]any{"text": req.Text}); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -115,11 +115,29 @@ func (s *Server) handleToday(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	triage, err := s.Store.ErrorTriage(14, 50)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	repairs, err := s.Store.DueRepairs(time.Now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	openErrors, err := s.Store.CountOpenErrors()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"summary":          summary,
 		"stale_notes":      stale,
 		"open_questions":   len(questions),
 		"oldest_questions": oldest,
 		"leeches":          leeches,
+		"error_triage":     len(triage),
+		"open_errors":      openErrors,
+		"repairs_due":      repairs,
 	})
 }
