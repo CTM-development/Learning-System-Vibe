@@ -52,6 +52,43 @@ func cardIDs(t *testing.T, s *Syncer) []string {
 	return ids
 }
 
+func TestIncrementalSyncSkipsUnchangedFiles(t *testing.T) {
+	s, dir := newTestSyncer(t)
+	writeNote(t, dir, "a.md", "Q: What is FSRS?\nA: A scheduler.\n")
+	writeNote(t, dir, "b.md", "# Just prose\n\nNo cards here.\n")
+
+	// First run creates the card and stamps the anchor.
+	if _, err := s.SyncAll(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second run with no file changes must do no work: no cards created,
+	// updated or orphaned, and no anchors rewritten.
+	res, err := s.SyncAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.CardsCreated != 0 || res.CardsUpdated != 0 || res.CardsOrphaned != 0 || res.AnchorsWritten != 0 {
+		t.Errorf("re-sync of unchanged tree did work: %+v", res)
+	}
+	if ids := cardIDs(t, s); len(ids) != 1 {
+		t.Errorf("active cards after no-op re-sync = %v, want 1 (skip must not orphan)", ids)
+	}
+
+	// Editing one file re-syncs only it: the card's content updates.
+	writeNote(t, dir, "a.md", readNote(t, dir, "a.md")+"\nQ: What does fuzz do?\nA: Spreads due dates.\n")
+	res, err = s.SyncAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.CardsCreated != 1 {
+		t.Errorf("editing a file did not pick up the new card: %+v", res)
+	}
+	if ids := cardIDs(t, s); len(ids) != 2 {
+		t.Errorf("active cards after edit = %v, want 2", ids)
+	}
+}
+
 func TestSyncWritesAnchorsAndCreatesCards(t *testing.T) {
 	s, dir := newTestSyncer(t)
 	writeNote(t, dir, "math/algebra.md", "Q: What is a group?\nA: A set with an associative operation, identity and inverses.\n\nA ring has {{c1::two}} operations.\n")

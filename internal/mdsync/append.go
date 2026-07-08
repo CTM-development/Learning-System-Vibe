@@ -27,6 +27,8 @@ func (s *Syncer) AppendQABlocks(rel, heading string, cards []QABlock) error {
 	if len(cards) == 0 {
 		return nil
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	abs := filepath.Join(s.NotesDir, filepath.FromSlash(rel))
 	raw, err := os.ReadFile(abs)
 	if err != nil {
@@ -68,6 +70,8 @@ func (s *Syncer) AppendOpenQuestion(text string) error {
 	if text == "" {
 		return fmt.Errorf("empty capture")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	abs := filepath.Join(s.NotesDir, InboxNote)
 
 	raw, err := os.ReadFile(abs)

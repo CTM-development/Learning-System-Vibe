@@ -19,6 +19,7 @@ type NoteRow struct {
 	Sources     []string
 	Mtime       int64
 	Content     string
+	ContentHash string // SHA-256 of the file bytes; drives incremental sync
 }
 
 // CardRow mirrors the cards table.
@@ -42,16 +43,17 @@ func (s *Store) UpsertNote(n NoteRow) error {
 		noteType = "reading"
 	}
 	_, err := s.DB.Exec(`
-		INSERT INTO notes (path, title, frontmatter, stage, status, type, tags, sources, mtime, content)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO notes (path, title, frontmatter, stage, status, type, tags, sources, mtime, content, content_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			title = excluded.title, frontmatter = excluded.frontmatter,
 			stage = excluded.stage, status = excluded.status,
 			type = excluded.type,
 			tags = excluded.tags, sources = excluded.sources,
-			mtime = excluded.mtime, content = excluded.content`,
+			mtime = excluded.mtime, content = excluded.content,
+			content_hash = excluded.content_hash`,
 		n.Path, n.Title, string(fm), nullIfEmpty(n.Stage), nullIfEmpty(n.Status),
-		noteType, string(tags), string(sources), n.Mtime, n.Content)
+		noteType, string(tags), string(sources), n.Mtime, n.Content, n.ContentHash)
 	if err != nil {
 		return fmt.Errorf("upsert note %s: %w", n.Path, err)
 	}
@@ -125,6 +127,45 @@ func (s *Store) UpsertCard(c CardRow) (bool, error) {
 // ListActiveCardIDs returns ids of all non-orphaned cards.
 func (s *Store) ListActiveCardIDs() ([]string, error) {
 	return s.queryStrings(`SELECT id FROM cards WHERE orphaned_at IS NULL`)
+}
+
+// NoteContentHashes returns every stored note's path → content hash. Sync
+// uses it to skip files byte-for-byte unchanged since the last run.
+func (s *Store) NoteContentHashes() (map[string]string, error) {
+	rows, err := s.DB.Query(`SELECT path, content_hash FROM notes`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var path, hash string
+		if err := rows.Scan(&path, &hash); err != nil {
+			return nil, err
+		}
+		out[path] = hash
+	}
+	return out, rows.Err()
+}
+
+// ActiveCardIDsByNote groups non-orphaned card ids by note path, so a sync
+// that skips an unchanged note can still mark its cards as seen (and thus
+// spare them from the orphan sweep).
+func (s *Store) ActiveCardIDsByNote() (map[string][]string, error) {
+	rows, err := s.DB.Query(`SELECT note_path, id FROM cards WHERE orphaned_at IS NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var notePath, id string
+		if err := rows.Scan(&notePath, &id); err != nil {
+			return nil, err
+		}
+		out[notePath] = append(out[notePath], id)
+	}
+	return out, rows.Err()
 }
 
 // ListCardBaseIDs returns the anchor part of every card id (cloze ids are

@@ -27,6 +27,8 @@ func (s *Syncer) SetStage(rel, stage string) error {
 		return fmt.Errorf("invalid stage %q (want one of %s)", stage, strings.Join(ValidStages, "|"))
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	abs := filepath.Join(s.NotesDir, filepath.FromSlash(rel))
 	raw, err := os.ReadFile(abs)
 	if err != nil {
