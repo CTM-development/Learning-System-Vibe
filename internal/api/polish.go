@@ -92,7 +92,7 @@ func (s *Server) handleToday(w http.ResponseWriter, r *http.Request) {
 	}
 	// "New available" should reflect cards that actually exist, not just
 	// the configured daily allowance.
-	if newCards, err := s.Store.NewCards(time.Now(), summary.NewRemaining, ""); err == nil {
+	if newCards, err := s.Store.NewCards(time.Now(), summary.NewRemaining, nil); err == nil {
 		summary.NewRemaining = len(newCards)
 	}
 	stale, err := s.Store.StaleNotes(14, 8)

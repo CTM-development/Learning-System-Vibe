@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   apiGet,
@@ -6,6 +7,7 @@ import {
   causeLabels,
   type GradeResponse,
   type LLMStatus,
+  type ProjectInfo,
   type QueueCard,
   type QueueResponse,
   type ReviewResponse,
@@ -34,12 +36,19 @@ const verdictColors = {
 
 export default function Review() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [deck, setDeck] = useState("");
+  const [project, setProject] = useState(searchParams.get("project") ?? "");
   const [cram, setCram] = useState(false);
 
   const decks = useQuery({
     queryKey: ["decks"],
     queryFn: () => apiGet<TimeBucket[]>("/api/decks"),
+  });
+
+  const projects = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => apiGet<ProjectInfo[]>("/api/projects"),
   });
 
   const status = useQuery({
@@ -49,11 +58,38 @@ export default function Review() {
   const [typeAnswers, setTypeAnswers] = useState(false);
   const [answer, setAnswer] = useState("");
 
+  // deck and project are mutually exclusive scopes.
+  const selectDeck = (v: string) => {
+    setDeck(v);
+    if (v) setProject("");
+    else if (!project) setCram(false);
+  };
+  const selectProject = (v: string) => {
+    setProject(v);
+    if (v) setDeck("");
+    else if (!deck) setCram(false);
+  };
+
+  // Keep ?project= in the URL in sync so /review?project=3 is deep-linkable.
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (project) next.set("project", project);
+        else next.delete("project");
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+
   const params = new URLSearchParams();
-  if (deck) params.set("deck", deck);
-  if (cram && deck) params.set("cram", "1");
+  if (project) params.set("project", project);
+  else if (deck) params.set("deck", deck);
+  if (cram && (deck || project)) params.set("cram", "1");
   const queue = useQuery({
-    queryKey: ["queue", deck, cram],
+    queryKey: ["queue", deck, project, cram],
     queryFn: () => apiGet<QueueResponse>(`/api/queue?${params}`),
     staleTime: Infinity,
     refetchOnMount: "always",
@@ -76,7 +112,7 @@ export default function Review() {
     setRevealed(false);
     setDone(0);
     undoStack.current = [];
-  }, [deck, cram]);
+  }, [deck, project, cram]);
 
   const cards: QueueCard[] = queue.data ? [...queue.data.due, ...queue.data.new] : [];
   const card = cards[position];
@@ -191,10 +227,7 @@ export default function Review() {
     <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2 text-xs text-zinc-500">
       <select
         value={deck}
-        onChange={(e) => {
-          setDeck(e.target.value);
-          if (!e.target.value) setCram(false);
-        }}
+        onChange={(e) => selectDeck(e.target.value)}
         className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
       >
         <option value="">All decks</option>
@@ -204,10 +237,22 @@ export default function Review() {
           </option>
         ))}
       </select>
-      {deck && (
+      <select
+        value={project}
+        onChange={(e) => selectProject(e.target.value)}
+        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+      >
+        <option value="">All projects</option>
+        {projects.data?.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      {(deck || project) && (
         <label
           className="flex cursor-pointer items-center gap-1.5"
-          title="Exam prep: every card in the deck, weakest first, ignoring due dates"
+          title="Exam prep: every card in scope, weakest first, ignoring due dates"
         >
           <input
             type="checkbox"
@@ -245,6 +290,13 @@ export default function Review() {
     </div>
   );
 
+  const deadlineBanner = queue.data?.days_left != null && (
+    <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+      Deadline {queue.data.deadline} — {queue.data.days_left} days left · up to{" "}
+      {queue.data.target_new_today} new cards/day
+    </div>
+  );
+
   const errorBanner = pendingError && (
     <div className="space-y-1.5 rounded-lg border border-red-200 bg-red-50/60 p-3 text-xs dark:border-red-900/50 dark:bg-red-950/30">
       <div className="flex items-start justify-between gap-2">
@@ -279,6 +331,7 @@ export default function Review() {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         {scopeBar}
+        {deadlineBanner}
         {errorBanner}
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
           <h1 className="text-xl font-semibold">
@@ -287,8 +340,8 @@ export default function Review() {
           <p className="mt-2 text-sm text-zinc-500">
             {done > 0
               ? "Queue cleared for now."
-              : deck
-                ? "No cards due in this deck today. Try Cram for exam prep."
+              : deck || project
+                ? "No cards due in this scope today. Try Cram for exam prep."
                 : "No cards due and no new cards remaining today."}
           </p>
         </div>
@@ -299,6 +352,7 @@ export default function Review() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       {scopeBar}
+      {deadlineBanner}
       {errorBanner}
       <div className="flex items-center justify-between text-xs text-zinc-500">
         <span>

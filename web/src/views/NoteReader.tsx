@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   apiGet,
@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { stageColors } from "./Notes";
 import Markdown from "../Markdown";
+import { renderableNoteBody } from "../noteBody";
 import { useReadTimer } from "../useReadTimer";
 
 const stages = ["skim", "deep", "synthesis"] as const;
@@ -34,6 +35,19 @@ export default function NoteReader() {
     queryFn: () => apiGet<NoteDetail>(`/api/notes/${path}`),
     enabled: path !== "",
   });
+
+  // [[note#Heading]] navigation: once the note body is rendered, scroll to
+  // the rehype-slug heading id carried in the URL hash. Cross-note SPA
+  // navigation doesn't trigger the browser's native anchor jump, so do it
+  // here; same-note #hash clicks fall through to native behavior too, and
+  // this effect simply agrees with them.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash || !note.data) return;
+    document
+      .getElementById(decodeURIComponent(hash.slice(1)))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [hash, note.data]);
 
   const setStage = useMutation({
     mutationFn: (stage: string) =>
@@ -95,25 +109,7 @@ export default function NoteReader() {
   }
 
   const n = note.data;
-  // Reading view: frontmatter is shown as chips instead; srs ID anchors are
-  // plumbing; cloze markers collapse to their visible text; wikilinks become
-  // real links — to the note when resolved, to wiki generation when red.
-  const linkTargets = new Map(n.links.map((l) => [l.target, l.to_path]));
-  const body = n.content
-    .replace(/^---\n[\s\S]*?\n---\n?/, "")
-    .replace(/\s*<!--\s*srs:[0-9a-f]+\s*-->/g, "")
-    .replace(/\{\{c\d+::(.*?)(?:::.*?)?\}\}/g, "$1")
-    .replace(
-      /\[\[([^[\]|]+)(?:\|([^[\]]*))?\]\]/g,
-      (whole, target: string, label?: string) => {
-        const t = target.trim();
-        const text = (label ?? "").trim() || t;
-        const to = linkTargets.get(t);
-        if (to) return `[${text}](/notes/${to})`;
-        if (to === "") return `[${text}](/wiki?topic=${encodeURIComponent(t)})`;
-        return whole; // inside a code fence — parser didn't record it
-      },
-    );
+  const body = renderableNoteBody(n.content, n.links);
   const assetBase = path.includes("/")
     ? path.slice(0, path.lastIndexOf("/") + 1)
     : "";

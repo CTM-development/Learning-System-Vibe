@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/CTM-development/learning-system-vibe/internal/srs"
@@ -28,8 +29,22 @@ const queueCardQuery = `
 	JOIN card_schedule cs ON cs.card_id = c.id
 	WHERE c.orphaned_at IS NULL AND c.suspended = 0`
 
-// deckFilter matches a deck and its subfolders ("ml" matches "ml/dl").
-const deckFilter = ` AND (c.deck = ? OR c.deck LIKE ? || '/%')`
+// decksWhere builds a filter matching cards in any of the given decks,
+// each including its subfolders ("ml" matches "ml/dl"). Empty decks means
+// no restriction. Overlapping prefixes are fine: the clauses OR over one
+// row, so a card is never duplicated.
+func decksWhere(decks []string) (string, []any) {
+	if len(decks) == 0 {
+		return "", nil
+	}
+	clauses := make([]string, 0, len(decks))
+	args := make([]any, 0, 2*len(decks))
+	for _, d := range decks {
+		clauses = append(clauses, `(c.deck = ? OR c.deck LIKE ? || '/%')`)
+		args = append(args, d, d)
+	}
+	return ` AND (` + strings.Join(clauses, " OR ") + `)`, args
+}
 
 func (s *Store) queryQueueCards(query string, args ...any) ([]QueueCard, error) {
 	rows, err := s.DB.Query(query, args...)
@@ -49,45 +64,59 @@ func (s *Store) queryQueueCards(query string, args ...any) ([]QueueCard, error) 
 }
 
 // DueCards returns non-new, non-buried cards due at or before now, oldest
-// due first, optionally restricted to a deck (and its subfolders).
-func (s *Store) DueCards(now time.Time, deck string) ([]QueueCard, error) {
+// due first, optionally restricted to decks (each with its subfolders).
+func (s *Store) DueCards(now time.Time, decks []string) ([]QueueCard, error) {
 	nowStr := now.UTC().Format(time.RFC3339)
 	query := queueCardQuery + ` AND (cs.buried_until IS NULL OR cs.buried_until <= ?)
 		AND cs.state != 0 AND cs.due <= ?`
 	args := []any{nowStr, nowStr}
-	if deck != "" {
-		query += deckFilter
-		args = append(args, deck, deck)
-	}
+	where, wargs := decksWhere(decks)
+	query += where
+	args = append(args, wargs...)
 	return s.queryQueueCards(query+` ORDER BY cs.due`, args...)
 }
 
 // NewCards returns up to limit never-reviewed, non-buried cards, oldest
-// first, optionally restricted to a deck.
-func (s *Store) NewCards(now time.Time, limit int, deck string) ([]QueueCard, error) {
+// first, optionally restricted to decks.
+func (s *Store) NewCards(now time.Time, limit int, decks []string) ([]QueueCard, error) {
 	if limit <= 0 {
 		return []QueueCard{}, nil
 	}
 	query := queueCardQuery + ` AND (cs.buried_until IS NULL OR cs.buried_until <= ?)
 		AND cs.state = 0`
 	args := []any{now.UTC().Format(time.RFC3339)}
-	if deck != "" {
-		query += deckFilter
-		args = append(args, deck, deck)
-	}
+	where, wargs := decksWhere(decks)
+	query += where
+	args = append(args, wargs...)
 	query += ` ORDER BY c.created_at, c.id LIMIT ?`
 	args = append(args, limit)
 	return s.queryQueueCards(query, args...)
 }
 
-// CramCards returns every active card in a deck regardless of due date,
+// CramCards returns every active card in the decks regardless of due date,
 // weakest memory first (stability ascending, so new/lapsed cards lead).
 // Suspended, orphaned and buried cards stay excluded.
-func (s *Store) CramCards(now time.Time, deck string, limit int) ([]QueueCard, error) {
-	query := queueCardQuery + ` AND (cs.buried_until IS NULL OR cs.buried_until <= ?)` +
-		deckFilter + ` ORDER BY cs.stability, cs.due LIMIT ?`
-	return s.queryQueueCards(query,
-		now.UTC().Format(time.RFC3339), deck, deck, limit)
+func (s *Store) CramCards(now time.Time, decks []string, limit int) ([]QueueCard, error) {
+	query := queueCardQuery + ` AND (cs.buried_until IS NULL OR cs.buried_until <= ?)`
+	args := []any{now.UTC().Format(time.RFC3339)}
+	where, wargs := decksWhere(decks)
+	query += where
+	args = append(args, wargs...)
+	query += ` ORDER BY cs.stability, cs.due LIMIT ?`
+	args = append(args, limit)
+	return s.queryQueueCards(query, args...)
+}
+
+// CountNewCards counts never-reviewed active cards in the given decks —
+// the remaining backlog a deadline's pacing must clear.
+func (s *Store) CountNewCards(decks []string) (int, error) {
+	query := `SELECT COUNT(*) FROM cards c
+		JOIN card_schedule cs ON cs.card_id = c.id
+		WHERE c.orphaned_at IS NULL AND c.suspended = 0 AND cs.state = 0`
+	where, args := decksWhere(decks)
+	var n int
+	err := s.DB.QueryRow(query+where, args...).Scan(&n)
+	return n, err
 }
 
 // BuryCard hides a card from queues until the given time (local tomorrow,
@@ -151,6 +180,21 @@ func (s *Store) CountNewIntroducedToday() (int, error) {
 		  AND json_extract(payload, '$.before.state') = 0
 		  AND date(ts, 'localtime') = date('now', 'localtime')
 		  AND id NOT IN (`+undoneReviewIDs+`)`).Scan(&n)
+	return n, err
+}
+
+// CountNewIntroducedTodayForDecks is CountNewIntroducedToday restricted to
+// cards in the given decks — the basis for per-project pacing quotas.
+func (s *Store) CountNewIntroducedTodayForDecks(decks []string) (int, error) {
+	query := `SELECT COUNT(*) FROM activity_events e
+		JOIN cards c ON c.id = e.ref
+		WHERE e.kind = 'card_review'
+		  AND json_extract(e.payload, '$.before.state') = 0
+		  AND date(e.ts, 'localtime') = date('now', 'localtime')
+		  AND e.id NOT IN (` + undoneReviewIDs + `)`
+	where, args := decksWhere(decks)
+	var n int
+	err := s.DB.QueryRow(query+where, args...).Scan(&n)
 	return n, err
 }
 

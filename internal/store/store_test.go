@@ -26,6 +26,7 @@ func TestMigrateCreatesSchema(t *testing.T) {
 		"notes", "cards", "card_schedule", "sessions",
 		"activity_events", "sources", "open_questions",
 		"notes_fts", "sources_fts", "schema_migrations",
+		"projects", "project_dirs",
 	}
 	for _, table := range want {
 		var name string

@@ -8,10 +8,12 @@ import {
   type NoteSummary,
   type NoteType,
   type OpenQuestion,
+  type ProjectInfo,
   type SearchResponse,
   type Stage,
   type SyncResult,
 } from "../api";
+import NoteTree from "../components/NoteTree";
 
 const stageFilters: { value: Stage | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -53,6 +55,11 @@ export default function Notes() {
   const sync = useMutation({
     mutationFn: () => apiPost<SyncResult>("/api/sync"),
     onSuccess: () => queryClient.invalidateQueries(),
+  });
+
+  const projects = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => apiGet<ProjectInfo[]>("/api/projects"),
   });
 
   return (
@@ -145,39 +152,46 @@ export default function Notes() {
         </div>
       )}
 
-      <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
-        {notes.data?.map((n) => (
-          <li key={n.path}>
-            <Link
-              to={`/notes/${n.path}`}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-            >
-              <span className="font-medium">{n.title}</span>
-              {n.type === "thought" && (
-                <span className="rounded bg-fuchsia-100 px-1.5 py-0.5 text-xs text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300">
-                  thought
-                </span>
-              )}
-              {n.stage && (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${stageColors[n.stage] ?? ""}`}
-                >
-                  {n.stage}
-                </span>
-              )}
-              <span className="text-xs text-zinc-400">{n.path}</span>
-              <span className="ml-auto text-xs text-zinc-500">
-                {n.card_count} card{n.card_count === 1 ? "" : "s"}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {notes.data && notes.data.length > 0 && (
+        <NoteTree
+          notes={notes.data}
+          forceExpand={filter !== "all" || typeFilter !== "all"}
+          projects={projects.data?.map((p) => ({ name: p.name, dirs: p.dirs }))}
+          renderNote={(n) => <NoteRow note={n} hidePath />}
+        />
+      )}
 
       <OpenQuestions />
         </>
       )}
     </div>
+  );
+}
+
+function NoteRow({ note: n, hidePath }: { note: NoteSummary; hidePath?: boolean }) {
+  return (
+    <Link
+      to={`/notes/${n.path}`}
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+    >
+      <span className="font-medium">{n.title}</span>
+      {n.type === "thought" && (
+        <span className="rounded bg-fuchsia-100 px-1.5 py-0.5 text-xs text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300">
+          thought
+        </span>
+      )}
+      {n.stage && (
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs ${stageColors[n.stage] ?? ""}`}
+        >
+          {n.stage}
+        </span>
+      )}
+      {!hidePath && <span className="text-xs text-zinc-400">{n.path}</span>}
+      <span className="ml-auto text-xs text-zinc-500">
+        {n.card_count} card{n.card_count === 1 ? "" : "s"}
+      </span>
+    </Link>
   );
 }
 

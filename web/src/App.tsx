@@ -20,10 +20,12 @@ import Generate from "./views/Generate";
 import Today from "./views/Today";
 import Wiki from "./views/Wiki";
 import Errors from "./views/Errors";
+import Projects from "./views/Projects";
 
 const views = [
   { path: "/today", label: "Today" },
   { path: "/review", label: "Review" },
+  { path: "/projects", label: "Projects" },
   { path: "/notes", label: "Notes" },
   { path: "/sources", label: "Sources" },
   { path: "/workbench", label: "Workbench" },
@@ -43,6 +45,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/today" replace />} />
           <Route path="/today" element={<Today />} />
           <Route path="/review" element={<Review />} />
+          <Route path="/projects" element={<Projects />} />
           <Route path="/notes" element={<Notes />} />
           <Route path="/notes/*" element={<NoteReader />} />
           <Route path="/cards" element={<Cards />} />

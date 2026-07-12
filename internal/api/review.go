@@ -4,25 +4,56 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/CTM-development/learning-system-vibe/internal/store"
 )
 
 // handleQueue returns today's review queue: due cards plus new cards up to
-// the daily limit, optionally scoped to a deck. With cram=1 (requires a
-// deck) it instead returns every active deck card, weakest first, ignoring
-// due dates — for exam prep.
+// the daily limit, optionally scoped to a deck or a project (mutually
+// exclusive). A project with a deadline paces new cards so the whole
+// backlog is introduced before the deadline, raising the daily limit when
+// needed. With cram=1 (requires a deck or project) it instead returns every
+// active card in scope, weakest first, ignoring due dates — for exam prep.
 func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	deck := r.URL.Query().Get("deck")
+	projectParam := r.URL.Query().Get("project")
+	if deck != "" && projectParam != "" {
+		writeError(w, http.StatusBadRequest, errors.New("deck and project are mutually exclusive"))
+		return
+	}
 
-	if r.URL.Query().Get("cram") == "1" {
-		if deck == "" {
-			writeError(w, http.StatusBadRequest, errors.New("cram mode needs a deck"))
+	var decks []string
+	var project *store.Project
+	if projectParam != "" {
+		id, err := strconv.ParseInt(projectParam, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid project id"))
 			return
 		}
-		cards, err := s.Store.CramCards(now, deck, 500)
+		p, err := s.Store.GetProject(id)
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		project = &p
+		decks = p.Dirs
+	} else if deck != "" {
+		decks = []string{deck}
+	}
+
+	if r.URL.Query().Get("cram") == "1" {
+		if len(decks) == 0 {
+			writeError(w, http.StatusBadRequest, errors.New("cram mode needs a deck or project"))
+			return
+		}
+		cards, err := s.Store.CramCards(now, decks, 500)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
@@ -36,7 +67,7 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	due, err := s.Store.DueCards(now, deck)
+	due, err := s.Store.DueCards(now, decks)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -47,16 +78,46 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	remaining := s.Config.NewPerDay - introduced
-	newCards, err := s.Store.NewCards(now, remaining, deck)
+
+	resp := map[string]any{"due": due}
+	if project != nil {
+		resp["project"] = project.ID
+		if project.Deadline != "" {
+			// Deadline pacing: spread the project's new-card backlog over
+			// the remaining days. The quota only ever raises the global
+			// limit, and it is computed against project-scoped counts so it
+			// stays stable across repeated fetches within a day.
+			left, err := daysLeft(project.Deadline, now)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			remainingNew, err := s.Store.CountNewCards(decks)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			introducedProj, err := s.Store.CountNewIntroducedTodayForDecks(decks)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			target := targetNewToday(remainingNew, introducedProj, left, s.Config.NewPerDay)
+			remaining = target - introducedProj
+			resp["deadline"] = project.Deadline
+			resp["days_left"] = left
+			resp["target_new_today"] = target
+		}
+	}
+
+	newCards, err := s.Store.NewCards(now, remaining, decks)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"due":           due,
-		"new":           newCards,
-		"new_remaining": max(remaining, 0),
-	})
+	resp["new"] = newCards
+	resp["new_remaining"] = max(remaining, 0)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleReview applies a rating to a card, persists the new FSRS state and
@@ -83,23 +144,54 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	after, err := s.Scheduler.Review(before, req.Rating, time.Now())
+	now := time.Now()
+	after, err := s.Scheduler.Review(before, req.Rating, now)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	if err := s.Store.UpdateSchedule(after); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	payload := map[string]any{
 		"rating": req.Rating,
 		"before": before,
-		"after":  after,
 	}
 	if req.Cram {
 		payload["cram"] = true
+	}
+
+	// Deadline cap: when a project with an active deadline covers this
+	// card's deck, squeeze the FSRS due date so the card surfaces at least
+	// once more before the deadline. FSRS fuzz ran inside Review, so the
+	// cap is final; undo is unaffected because it restores the before
+	// snapshot.
+	card, err := s.Store.GetCard(req.CardID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	deadline, active, err := s.Store.EarliestActiveDeadline(card.Deck, now.Format("2006-01-02"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if active {
+		capTime, err := parseLocalDate(deadline)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if due, capped := capDue(after.Due, now, capTime); capped {
+			payload["deadline_capped"] = true
+			payload["fsrs_due"] = after.Due
+			after.Due = due
+			after.ScheduledDays = uint64(due.Sub(now).Hours() / 24)
+		}
+	}
+	payload["after"] = after
+
+	if err := s.Store.UpdateSchedule(after); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
 	}
 	eventID, err := s.Store.LogEvent("card_review", req.CardID, req.ElapsedMs,
 		s.Store.ActiveSessionID(), payload)

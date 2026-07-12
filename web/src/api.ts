@@ -97,6 +97,10 @@ export interface QueueResponse {
   new: QueueCard[];
   new_remaining: number;
   cram?: boolean;
+  project?: number;
+  deadline?: string;
+  days_left?: number;
+  target_new_today?: number;
 }
 
 export interface Session {
@@ -121,6 +125,10 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
       body: JSON.stringify(body),
     }),
   );
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  return handle<T>(await fetch(path, { method: "DELETE" }));
 }
 
 export interface StatsSummary {
@@ -396,4 +404,19 @@ export interface SyncResult {
   cards_orphaned: number;
   anchors_written: number;
   open_questions: number;
+}
+
+export interface Project {
+  id: number;
+  name: string;
+  deadline: string; // "" = none
+  dirs: string[];
+  created_at: string;
+}
+
+export interface ProjectInfo extends Project {
+  total_cards: number;
+  new_cards: number;
+  due_now: number;
+  days_left: number | null; // null when no deadline; <=0 means passed
 }

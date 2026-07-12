@@ -36,9 +36,14 @@ func (s *Store) SetNoteLinks(fromPath string, targets []string) error {
 
 // ResolveNoteLinks (re)resolves every link target against current notes.
 // A target matches a note by exact path, path without extension, file stem
-// or title (all case-insensitive).
+// or title (all case-insensitive). Targets are normalized first: a
+// "#Heading" fragment and a leading "/" are stripped. A target containing a
+// slash ("concepts/Foo") also matches any note whose path ends in that
+// fragment, so Obsidian-style partial paths resolve from any folder.
+// Relative targets ("../DL/Foo", "./Foo") are anchored at the linking
+// note's folder, so the same target can resolve differently per note.
 func (s *Store) ResolveNoteLinks() error {
-	rows, err := s.DB.Query(`SELECT path, title FROM notes`)
+	rows, err := s.DB.Query(`SELECT path, title FROM notes ORDER BY path`)
 	if err != nil {
 		return err
 	}
@@ -54,7 +59,7 @@ func (s *Store) ResolveNoteLinks() error {
 			byName[key] = notePath
 		}
 	}
-	var paths, titles []string
+	var paths, titles, lowerNoExt []string
 	for rows.Next() {
 		var p, t string
 		if err := rows.Scan(&p, &t); err != nil {
@@ -70,6 +75,7 @@ func (s *Store) ResolveNoteLinks() error {
 	}
 	for _, p := range paths {
 		noExt := strings.TrimSuffix(p, path.Ext(p))
+		lowerNoExt = append(lowerNoExt, strings.ToLower(noExt))
 		add(p, p)
 		add(noExt, p)
 		add(path.Base(noExt), p)
@@ -78,32 +84,73 @@ func (s *Store) ResolveNoteLinks() error {
 		add(t, paths[i])
 	}
 
-	linkRows, err := s.DB.Query(`SELECT DISTINCT target FROM note_links`)
+	resolve := func(fromPath, target string) (string, bool) {
+		key := strings.ToLower(strings.TrimSpace(target))
+		// "[[note#Heading]]" links to the note; the heading is not
+		// addressable here, so it only decorates the link text.
+		if i := strings.Index(key, "#"); i >= 0 {
+			key = strings.TrimSpace(key[:i])
+		}
+		key = strings.TrimPrefix(key, "/")
+		if key == "" {
+			return "", false
+		}
+		if to, ok := byName[key]; ok {
+			return to, true
+		}
+		// "../DL/Foo" / "./Foo" resolve from the linking note's folder.
+		// A join that still escapes the vault root can't match anything.
+		if strings.HasPrefix(key, "../") || strings.HasPrefix(key, "./") {
+			rel := path.Join(strings.ToLower(path.Dir(fromPath)), key)
+			if !strings.HasPrefix(rel, "../") {
+				if to, ok := byName[rel]; ok {
+					return to, true
+				}
+			}
+		}
+		// Partial paths: "concepts/Foo" written in some other folder
+		// matches ".../concepts/Foo.md"; paths are sorted, so the first
+		// suffix hit is stable across runs.
+		if strings.Contains(key, "/") {
+			for i, ln := range lowerNoExt {
+				if strings.HasSuffix(ln, "/"+key) {
+					return paths[i], true
+				}
+			}
+		}
+		return "", false
+	}
+
+	// Relative targets depend on the linking note, so resolution is per
+	// (from_path, target) pair — the table's primary key.
+	linkRows, err := s.DB.Query(`SELECT from_path, target FROM note_links`)
 	if err != nil {
 		return err
 	}
-	var targets []string
+	type link struct{ from, target string }
+	var links []link
 	for linkRows.Next() {
-		var t string
-		if err := linkRows.Scan(&t); err != nil {
+		var l link
+		if err := linkRows.Scan(&l.from, &l.target); err != nil {
 			linkRows.Close()
 			return err
 		}
-		targets = append(targets, t)
+		links = append(links, l)
 	}
 	linkRows.Close()
 	if err := linkRows.Err(); err != nil {
 		return err
 	}
 
-	for _, t := range targets {
-		to, ok := byName[strings.ToLower(strings.TrimSpace(t))]
+	for _, l := range links {
+		to, ok := resolve(l.from, l.target)
 		var val any
 		if ok {
 			val = to
 		}
 		if _, err := s.DB.Exec(
-			`UPDATE note_links SET to_path = ? WHERE target = ?`, val, t); err != nil {
+			`UPDATE note_links SET to_path = ? WHERE from_path = ? AND target = ?`,
+			val, l.from, l.target); err != nil {
 			return err
 		}
 	}
